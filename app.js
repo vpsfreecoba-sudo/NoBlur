@@ -817,7 +817,15 @@ async function runVFI(file, width, height) {
             "-crf",
             "20",
             "-c:a",
-            "copy",
+            "aac",
+            "-b:a",
+            "250k",
+            "-ar",
+            "48000",
+            "-ac",
+            "2",
+            "-video_track_timescale",
+            "90000",
             "-threads",
             String(threads),
             outputName,
@@ -923,7 +931,15 @@ async function patchSingleFile(item) {
             logMessage("  [Pass 4/5] Tkhd Matrix Zero skipped.", "warning");
         }
 
-        logMessage("  [Pass 5/5] Finalization complete.", "success");
+        const commentResult = injectCommentUdta(finalBytes, finalView, "KwjYwI2DziQ8It5PyJGJgQ");
+        if (commentResult) {
+            finalBuffer = commentResult.newBuffer;
+            finalBytes = commentResult.newBytes;
+            finalView = new DataView(finalBuffer);
+            logMessage("  [Pass 5/5] Comment Udta Injection: Applied.", "success");
+        } else {
+            logMessage("  [Pass 5/5] Comment Udta Injection skipped.", "warning");
+        }
 
         return { finalBuffer, outputName, mimeType };
     }
