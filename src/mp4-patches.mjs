@@ -87,7 +87,8 @@ export function rebuildWithElstBypass(inputBytes, inputView) {
                 const mdhdVer = inputBytes[mdhdS];
                 const mdhdTsOff = mdhdVer === 0 ? 12 : 20;
                 const mdhdTs = inputView.getUint32(mdhdS + mdhdTsOff, false);
-                if (mdhdTs === 90000) mediaTime = 6000;
+                mediaTime = Math.round((6000 * mdhdTs) / 90000);
+                if (mediaTime < 1000) mediaTime = 0;
             }
         }
 

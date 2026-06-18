@@ -6,30 +6,92 @@ import {
 } from "./mp4-boxes.mjs";
 
 export function stripUdtaAtom(inputBytes, inputView) {
-    const fileSize = inputBytes.length;
-    const topBoxes = parseBoxes(inputBytes, inputView, 0, fileSize);
-    const moovBox = topBoxes.find((b) => b.type === "moov");
+    let workingBytes = inputBytes;
+    let workingView = inputView;
+    let moovBox;
+    let udtaBox;
+
+    const fileSize = workingBytes.length;
+    const topBoxes = parseBoxes(workingBytes, workingView, 0, fileSize);
+    moovBox = topBoxes.find((b) => b.type === "moov");
     if (!moovBox) return null;
 
     const moovChildren = parseBoxes(
-        inputBytes,
-        inputView,
+        workingBytes,
+        workingView,
         moovBox.offset + getBoxHeaderSize(moovBox),
         moovBox.end,
     );
-    const udtaBox = moovChildren.find((b) => b.type === "udta");
-    if (!udtaBox) return null;
+    udtaBox = moovChildren.find((b) => b.type === "udta");
+
+    if (!udtaBox) {
+        const emptyUdtaSize = 8;
+        const newBuffer = new ArrayBuffer(fileSize + emptyUdtaSize);
+        const newBytes = new Uint8Array(newBuffer);
+        const newView = new DataView(newBuffer);
+
+        const insertPos = moovBox.end;
+        newBytes.set(workingBytes.subarray(0, insertPos), 0);
+
+        newView.setUint32(insertPos, emptyUdtaSize, false);
+        newBytes[insertPos + 4] = 0x75;
+        newBytes[insertPos + 5] = 0x64;
+        newBytes[insertPos + 6] = 0x74;
+        newBytes[insertPos + 7] = 0x61;
+
+        newBytes.set(
+            workingBytes.subarray(insertPos),
+            insertPos + emptyUdtaSize,
+        );
+
+        updateBoxSize(newView, moovBox.offset, moovBox, emptyUdtaSize);
+
+        const mdatBox = topBoxes.find((b) => b.type === "mdat");
+        if (mdatBox && moovBox.offset < mdatBox.offset) {
+            updateChunkOffsets(
+                newBytes,
+                newView,
+                0,
+                fileSize + emptyUdtaSize,
+                emptyUdtaSize,
+            );
+        }
+
+        workingBytes = newBytes;
+        workingView = newView;
+
+        const updatedTopBoxes = parseBoxes(
+            workingBytes,
+            workingView,
+            0,
+            workingBytes.length,
+        );
+        moovBox = updatedTopBoxes.find((b) => b.type === "moov");
+        const updatedMoovChildren = parseBoxes(
+            workingBytes,
+            workingView,
+            moovBox.offset + getBoxHeaderSize(moovBox),
+            moovBox.end,
+        );
+        udtaBox = updatedMoovChildren.find((b) => b.type === "udta");
+    }
 
     const delta = -udtaBox.size;
-    const newBuffer = new ArrayBuffer(fileSize + delta);
+    const newBuffer = new ArrayBuffer(workingBytes.length + delta);
     const newBytes = new Uint8Array(newBuffer);
     const newView = new DataView(newBuffer);
 
-    newBytes.set(inputBytes.subarray(0, udtaBox.offset), 0);
-    newBytes.set(inputBytes.subarray(udtaBox.end), udtaBox.offset);
+    newBytes.set(workingBytes.subarray(0, udtaBox.offset), 0);
+    newBytes.set(workingBytes.subarray(udtaBox.end), udtaBox.offset);
 
     updateBoxSize(newView, moovBox.offset, moovBox, delta);
-    updateChunkOffsets(newBytes, newView, 0, fileSize + delta, delta);
+    updateChunkOffsets(
+        newBytes,
+        newView,
+        0,
+        workingBytes.length + delta,
+        delta,
+    );
 
     return { newBuffer, newBytes, newView };
 }
@@ -147,7 +209,7 @@ export function injectCommentUdta(inputBytes, inputView, commentText) {
     return { newBuffer, newBytes, newView };
 }
 
-export function stripTkhdMatrix(bytes, view) {
+export function stripTkhdMatrix(bytes, view, preserveRotation = true) {
     const fileSize = bytes.length;
     const topBoxes = parseBoxes(bytes, view, 0, fileSize);
     const moovBox = topBoxes.find((b) => b.type === "moov");
@@ -180,6 +242,17 @@ export function stripTkhdMatrix(bytes, view) {
         else continue;
 
         if (matrixOffset + 36 > tkhdBox.end) continue;
+
+        if (preserveRotation) {
+            const a = view.getUint32(matrixOffset + 0, false);
+            const b = view.getUint32(matrixOffset + 4, false);
+            const c = view.getUint32(matrixOffset + 12, false);
+            const d = view.getUint32(matrixOffset + 16, false);
+            const isIdentity =
+                a === 0x00010000 && b === 0 && c === 0 && d === 0x00010000;
+            const isAllZero = a === 0 && b === 0 && c === 0 && d === 0;
+            if (!isIdentity && !isAllZero) continue;
+        }
 
         view.setUint32(matrixOffset + 0, 0x00010000, false);
         view.setUint32(matrixOffset + 4, 0x00000000, false);

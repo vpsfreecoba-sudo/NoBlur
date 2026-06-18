@@ -2,6 +2,25 @@
 
 All notable changes to the NoBlur project are documented in this file.
 
+## [2.3.0] - 2026-06-17
+
+- VFI audio now uses `-c:a copy` (preserves original, faster processing)
+- Default density multiplier changed from 5x to 10x
+- `stripUdtaAtom()` force-applies (creates empty udta if missing for consistency)
+
+## [2.2.0] - 2026-06-17
+
+**Major Refactor — No FFmpeg Re-encode in Main Pipeline**
+
+- Main path now uses pure binary patching only (preserves 100% video quality, 10-100x faster)
+- FFmpeg lazy-loaded only when VFI enabled
+- Fixed critical chunk offset corruption in `normalizeContainer()` for streaming-optimized MP4s
+- Added VFR, co64, and codec-aware support to frame density inflation
+- Added rotation preservation, timescale-aware ELST, and container normalization
+- Moved resolution selector to VFI panel, updated modal text dynamically
+- Removed dead code (transform-utils.mjs, static FFmpeg imports, unused variables)
+- Infrastructure: Playwright → devDependencies, FFmpeg → dependencies, Biome pinned
+
 ## [2.1.0] - 2026-06-17
 
 ### Added

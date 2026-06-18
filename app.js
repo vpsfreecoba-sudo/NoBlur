@@ -1,5 +1,3 @@
-import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { fetchFile, toBlobURL } from "@ffmpeg/util";
 import {
     ChevronDown,
     Cpu,
@@ -17,8 +15,6 @@ import {
     clearAllRecords,
     deleteRecord,
     getAllRecords,
-    getHistoryTotalSize,
-    pruneOldRecords,
     saveRecord,
 } from "./db.js";
 import { initChangelog } from "./src/changelog.mjs";
@@ -29,11 +25,7 @@ import {
     updateChunkOffsets,
 } from "./src/mp4-boxes.mjs";
 import { inflateSampleTableVideo } from "./src/mp4-inflate.mjs";
-import {
-    buildEdtsAtom,
-    patchMvhdMatrix,
-    rebuildWithElstBypass,
-} from "./src/mp4-patches.mjs";
+import { patchMvhdMatrix, rebuildWithElstBypass } from "./src/mp4-patches.mjs";
 import {
     injectCommentUdta,
     stripTkhdMatrix,
@@ -42,8 +34,6 @@ import {
 
 const FRAME_CAPTURE_TIMEOUT_MS = 5000;
 const METADATA_TIMEOUT_MS = 10000;
-const MAX_STORAGE_BYTES = 209715200;
-const HISTORY_EXPIRY_MS = 43200000;
 const MAX_THUMBNAIL_DIMENSION = 120;
 const MOBILE_BREAKPOINT = 900;
 const DOWNLOAD_REVOKE_DELAY_MS = 1000;
@@ -52,7 +42,6 @@ const PROGRESS_FADE_DURATION_MS = 400;
 const DOWNLOAD_INTERVAL_MS = 300;
 const PATCH_INTERVAL_MS = 600;
 const MOBILE_SCROLL_DELAY_MS = 150;
-const MAX_VIDEO_DURATION_SECONDS = 30;
 const DOWNLOAD_ANCHOR_CLEANUP_MS = 100;
 const SAFE_THUMBNAIL_PREFIX = "data:image/jpeg;base64,";
 
@@ -87,7 +76,6 @@ const progressTrack = document.getElementById("progressTrack");
 const fileListEl = document.getElementById("fileList");
 const historyList = document.getElementById("historyList");
 const historyBadge = document.getElementById("historyBadge");
-const historyToggleBtn = document.getElementById("historyToggleBtn");
 const historyDrawer = document.getElementById("historyDrawer");
 const historyHeader = document.getElementById("historyHeader");
 const clearHistoryBtn = document.getElementById("clearHistoryBtn");
@@ -127,11 +115,7 @@ function refreshIcons() {
 
 function initializeApp() {
     refreshIcons();
-    pruneOldRecords()
-        .then(() => renderHistoryList())
-        .catch((err) =>
-            logMessage(`History pruning failed: ${err.message}`, "warning"),
-        );
+    renderHistoryList();
     adjustMobileLayout();
     window.addEventListener("resize", adjustMobileLayout);
 }
@@ -176,18 +160,22 @@ function isSupportedFile(file) {
 }
 
 function getMimeType(file) {
-    const lowerName = file.name.toLowerCase();
-    if (file.type && supportedMimeTypes.includes(file.type)) return file.type;
-    if (lowerName.endsWith(".mov")) return "video/quicktime";
     return "video/mp4";
+}
+
+function isMovFile(file) {
+    const lowerName = file.name.toLowerCase();
+    if (lowerName.endsWith(".mov")) return true;
+    if (file.type === "video/quicktime" || file.type === "video/x-quicktime")
+        return true;
+    return false;
 }
 
 function getOutputFilename(file) {
     const lastDotIndex = file.name.lastIndexOf(".");
-    if (lastDotIndex <= 0) return file.name + outputSuffix;
-    const name = file.name.substring(0, lastDotIndex);
-    const ext = file.name.substring(lastDotIndex);
-    return name + outputSuffix + ext;
+    const name =
+        lastDotIndex > 0 ? file.name.substring(0, lastDotIndex) : file.name;
+    return `${name + outputSuffix}.mp4`;
 }
 
 export function captureVideoFrame(file) {
@@ -214,13 +202,7 @@ export function captureVideoFrame(file) {
             resolve(result);
         }
 
-        objectUrl = URL.createObjectURL(file);
-        const timeoutId = setTimeout(() => {
-            cleanup(null);
-        }, FRAME_CAPTURE_TIMEOUT_MS);
-
-        video.src = objectUrl;
-
+        // Set event handlers BEFORE assigning src to prevent race condition
         video.onloadeddata = () => {
             if (settled) return;
             video.currentTime = 0.1;
@@ -257,7 +239,47 @@ export function captureVideoFrame(file) {
         video.onerror = () => {
             cleanup(null);
         };
+
+        // Assign src AFTER handlers are set
+        objectUrl = URL.createObjectURL(file);
+        const timeoutId = setTimeout(() => {
+            cleanup(null);
+        }, FRAME_CAPTURE_TIMEOUT_MS);
+
+        video.src = objectUrl;
     });
+}
+
+async function captureThumbnailWithFallbacks(
+    originalFile,
+    patchedBlob,
+    isSourceMov,
+) {
+    const sources = [
+        { target: originalFile, label: "original file" },
+        { target: patchedBlob, label: "patched video" },
+    ];
+
+    for (const source of sources) {
+        if (isCancelled) return null;
+        try {
+            const thumbnail = await captureVideoFrame(source.target);
+            if (thumbnail) {
+                logMessage(`Thumbnail captured from ${source.label}`, "info");
+                return thumbnail;
+            }
+            logMessage(
+                `Warning: Could not capture thumbnail from ${source.label}`,
+                "warning",
+            );
+        } catch (err) {
+            logMessage(
+                `Warning: Thumbnail capture from ${source.label} failed: ${err.message}`,
+                "warning",
+            );
+        }
+    }
+    return null;
 }
 
 function formatFileSize(bytes) {
@@ -401,25 +423,7 @@ async function addFiles(fileList) {
             selectedFiles = [];
             currentFlowState = "idle";
         }
-        let historySize = 0;
-        try {
-            historySize = await getHistoryTotalSize();
-        } catch (err) {
-            logMessage(`History size check failed: ${err.message}`, "warning");
-        }
-        const totalQueueSize = selectedFiles
-            .filter((f) => f.status !== "success")
-            .reduce((sum, f) => sum + f.size, 0);
-        let runningTotal = historySize + totalQueueSize;
-        if (runningTotal >= MAX_STORAGE_BYTES) {
-            logMessage(
-                "Upload failed: Storage limit reached (200MB). Please delete one or more items from your history persistence storage to upload files again.",
-                "error",
-            );
-            return;
-        }
         let skipped = 0;
-        let limitReached = false;
         for (const file of filesArray) {
             if (!isSupportedFile(file)) {
                 skipped++;
@@ -435,10 +439,6 @@ async function addFiles(fileList) {
                 );
                 continue;
             }
-            if (runningTotal + file.size > MAX_STORAGE_BYTES) {
-                limitReached = true;
-                break;
-            }
             selectedFiles.push({
                 file,
                 name: file.name,
@@ -449,13 +449,6 @@ async function addFiles(fileList) {
                 mimeType: null,
                 checked: true,
             });
-            runningTotal += file.size;
-        }
-        if (limitReached) {
-            logMessage(
-                "Some files skipped: 200MB total storage limit reached. Clear your history persistence storage to upload more files.",
-                "error",
-            );
         }
         if (skipped > 0) logMessage(`${skipped} file(s) skipped.`, "warning");
         renderFileList();
@@ -690,8 +683,12 @@ async function destroyFFmpegInstance() {
 
 async function getFFmpeg() {
     if (ffmpegInstance) return ffmpegInstance;
+
+    const { FFmpeg } = await import("@ffmpeg/ffmpeg");
+    const { toBlobURL } = await import("@ffmpeg/util");
+
     ffmpegInstance = new FFmpeg();
-    logMessage("Loading high-performance video engine...", "info");
+    logMessage("Loading VFI engine...", "info");
     const isMultiThread =
         typeof window.SharedArrayBuffer !== "undefined" &&
         window.crossOriginIsolated;
@@ -723,7 +720,7 @@ async function getFFmpeg() {
             );
         }
         await ffmpegInstance.load(loadConfig);
-        logMessage("Video engine loaded successfully.", "success");
+        logMessage("VFI engine loaded successfully.", "success");
     } catch (err) {
         await destroyFFmpegInstance();
         throw err;
@@ -739,6 +736,8 @@ function resolveInputExtension(file) {
 }
 
 async function runVFI(file, width, height, targetRes = 1080) {
+    const { fetchFile } = await import("@ffmpeg/util");
+
     let instance;
     try {
         if (isCancelled) throw new Error("Cancelled");
@@ -788,13 +787,7 @@ async function runVFI(file, width, height, targetRes = 1080) {
             "-crf",
             "20",
             "-c:a",
-            "aac",
-            "-b:a",
-            "250k",
-            "-ar",
-            "48000",
-            "-ac",
-            "2",
+            "copy",
             "-video_track_timescale",
             "90000",
             "-threads",
@@ -817,12 +810,394 @@ async function runVFI(file, width, height, targetRes = 1080) {
     }
 }
 
+async function extractMovThumbnail(file) {
+    const { fetchFile } = await import("@ffmpeg/util");
+    let instance;
+    try {
+        instance = await getFFmpeg();
+        await instance.writeFile("thumb_input.mov", await fetchFile(file));
+        await instance.exec([
+            "-i",
+            "thumb_input.mov",
+            "-ss",
+            "0.1",
+            "-vframes",
+            "1",
+            "-f",
+            "mjpeg",
+            "thumb.jpg",
+        ]);
+        const data = await instance.readFile("thumb.jpg");
+        await instance.deleteFile("thumb_input.mov").catch(() => {});
+        await instance.deleteFile("thumb.jpg").catch(() => {});
+        await destroyFFmpegInstance();
+        if (data && data.length > 100) {
+            return data.buffer;
+        }
+    } catch (_) {
+        await destroyFFmpegInstance();
+    }
+    return null;
+}
+
+async function remuxMovToMp4(file) {
+    // NOTE: Kept for VFI path only. Standard MOV→MP4 uses normalizeContainer directly.
+
+    const { fetchFile } = await import("@ffmpeg/util");
+
+    let instance;
+    try {
+        if (isCancelled) throw new Error("Cancelled");
+        instance = await getFFmpeg();
+        if (isCancelled) throw new Error("Cancelled");
+
+        const inputName = "input.mov";
+        const outputName = "output.mp4";
+
+        logMessage("Remuxing MOV to MP4...", "info");
+        await instance.writeFile(inputName, await fetchFile(file));
+        if (isCancelled) throw new Error("Cancelled");
+
+        // Try stream copy first (fast, no quality loss)
+        const args = [
+            "-i",
+            inputName,
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            outputName,
+        ];
+
+        const exitCode = await instance.exec(args);
+
+        let data = null;
+
+        if (exitCode === 0) {
+            data = await instance.readFile(outputName);
+        }
+
+        // Check if stream copy succeeded and output is valid
+        if (!data || data.length < 1024) {
+            logMessage(
+                "Stream copy failed, retrying with re-encoding...",
+                "warning",
+            );
+
+            // Fallback: re-encode with libx264
+            const reencodeArgs = [
+                "-i",
+                inputName,
+                "-c:v",
+                "libx264",
+                "-preset",
+                "ultrafast",
+                "-crf",
+                "18",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
+                outputName,
+            ];
+
+            const reencodeExitCode = await instance.exec(reencodeArgs);
+            if (reencodeExitCode !== 0) {
+                throw new Error(
+                    `MOV remux failed with exit code ${reencodeExitCode}`,
+                );
+            }
+
+            data = await instance.readFile(outputName);
+
+            if (data.length < 1024) {
+                throw new Error(
+                    `Remux output too small (${data.length} bytes)`,
+                );
+            }
+        }
+
+        logMessage("MOV remux complete.", "success");
+
+        const thumbName = "thumb.jpg";
+        let thumbnailBuffer = null;
+        try {
+            await instance.exec([
+                "-i",
+                inputName,
+                "-ss",
+                "0.1",
+                "-vframes",
+                "1",
+                "-f",
+                "mjpeg",
+                thumbName,
+            ]);
+            const thumbData = await instance.readFile(thumbName);
+            if (thumbData && thumbData.length > 100) {
+                thumbnailBuffer = thumbData.buffer;
+            }
+        } catch (_) {
+            thumbnailBuffer = null;
+        }
+
+        await instance.deleteFile(inputName).catch(() => {});
+        await instance.deleteFile(outputName).catch(() => {});
+        await instance.deleteFile(thumbName).catch(() => {});
+
+        await destroyFFmpegInstance();
+
+        return { mp4Buffer: data.buffer, thumbnailBuffer };
+    } catch (err) {
+        await destroyFFmpegInstance();
+        throw err;
+    }
+}
+
+function detectVideoCodecFromMoov(bytes, view, moovBox) {
+    const moovChildren = parseBoxes(
+        bytes,
+        view,
+        moovBox.offset + getBoxHeaderSize(moovBox),
+        moovBox.end,
+    );
+
+    for (const trak of moovChildren.filter((b) => b.type === "trak")) {
+        const trakChildren = parseBoxes(
+            bytes,
+            view,
+            trak.offset + getBoxHeaderSize(trak),
+            trak.end,
+        );
+        const mdiaBox = trakChildren.find((b) => b.type === "mdia");
+        if (!mdiaBox) continue;
+
+        const mdiaChildren = parseBoxes(
+            bytes,
+            view,
+            mdiaBox.offset + getBoxHeaderSize(mdiaBox),
+            mdiaBox.end,
+        );
+        const minfBox = mdiaChildren.find((b) => b.type === "minf");
+        if (!minfBox) continue;
+
+        const minfChildren = parseBoxes(
+            bytes,
+            view,
+            minfBox.offset + getBoxHeaderSize(minfBox),
+            minfBox.end,
+        );
+        const stblBox = minfChildren.find((b) => b.type === "stbl");
+        if (!stblBox) continue;
+
+        const stblChildren = parseBoxes(
+            bytes,
+            view,
+            stblBox.offset + getBoxHeaderSize(stblBox),
+            stblBox.end,
+        );
+        const stsdBox = stblChildren.find((b) => b.type === "stsd");
+        if (!stsdBox) continue;
+
+        const contentStart = stsdBox.offset + getBoxHeaderSize(stsdBox);
+        if (contentStart + 16 > stsdBox.end) continue;
+
+        return String.fromCharCode(
+            bytes[contentStart + 12],
+            bytes[contentStart + 13],
+            bytes[contentStart + 14],
+            bytes[contentStart + 15],
+        );
+    }
+
+    return "unknown";
+}
+
+function normalizeContainer(inputBytes, inputView) {
+    const fileSize = inputBytes.length;
+    const topBoxes = parseBoxes(inputBytes, inputView, 0, fileSize);
+
+    const ftypBox = topBoxes.find((b) => b.type === "ftyp");
+    const moovBox = topBoxes.find((b) => b.type === "moov");
+    const mdatBox = topBoxes.find((b) => b.type === "mdat");
+
+    if (!moovBox || !mdatBox) {
+        return {
+            newBuffer: inputBytes.buffer,
+            newBytes: inputBytes,
+            newView: inputView,
+            changed: false,
+        };
+    }
+
+    const moovBeforeMdat = moovBox.offset < mdatBox.offset;
+    let needsFtypRewrite = false;
+    let ftypBytes = null;
+
+    if (ftypBox) {
+        const ftypContent = inputBytes.subarray(
+            ftypBox.offset + getBoxHeaderSize(ftypBox),
+            ftypBox.end,
+        );
+        const majorBrand = String.fromCharCode(
+            ftypContent[0],
+            ftypContent[1],
+            ftypContent[2],
+            ftypContent[3],
+        );
+        if (majorBrand !== "isom") {
+            needsFtypRewrite = true;
+
+            const detectedCodec = detectVideoCodecFromMoov(
+                inputBytes,
+                inputView,
+                moovBox,
+            );
+            const isHevc = detectedCodec === "hvc1" || detectedCodec === "hev1";
+
+            if (isHevc) {
+                const newFtypSize = 32;
+                const newFtyp = new Uint8Array(newFtypSize);
+                const v = new DataView(newFtyp.buffer);
+                v.setUint32(0, newFtypSize, false);
+                newFtyp[4] = 0x66;
+                newFtyp[5] = 0x74;
+                newFtyp[6] = 0x79;
+                newFtyp[7] = 0x70;
+                newFtyp[8] = 0x69;
+                newFtyp[9] = 0x73;
+                newFtyp[10] = 0x6f;
+                newFtyp[11] = 0x34;
+                v.setUint32(12, 0x00000200, false);
+                newFtyp[16] = 0x69;
+                newFtyp[17] = 0x73;
+                newFtyp[18] = 0x6f;
+                newFtyp[19] = 0x6d;
+                newFtyp[20] = 0x69;
+                newFtyp[21] = 0x73;
+                newFtyp[22] = 0x6f;
+                newFtyp[23] = 0x32;
+                newFtyp[24] = 0x68;
+                newFtyp[25] = 0x76;
+                newFtyp[26] = 0x63;
+                newFtyp[27] = 0x31;
+                newFtyp[28] = 0x6d;
+                newFtyp[29] = 0x70;
+                newFtyp[30] = 0x34;
+                newFtyp[31] = 0x31;
+                ftypBytes = newFtyp;
+            } else {
+                const newFtypSize = 28;
+                const newFtyp = new Uint8Array(newFtypSize);
+                const v = new DataView(newFtyp.buffer);
+                v.setUint32(0, newFtypSize, false);
+                newFtyp[4] = 0x66;
+                newFtyp[5] = 0x74;
+                newFtyp[6] = 0x79;
+                newFtyp[7] = 0x70;
+                newFtyp[8] = 0x69;
+                newFtyp[9] = 0x73;
+                newFtyp[10] = 0x6f;
+                newFtyp[11] = 0x6d;
+                newFtyp[12] = 0x00;
+                newFtyp[13] = 0x00;
+                newFtyp[14] = 0x02;
+                newFtyp[15] = 0x00;
+                newFtyp[16] = 0x69;
+                newFtyp[17] = 0x73;
+                newFtyp[18] = 0x6f;
+                newFtyp[19] = 0x6d;
+                newFtyp[20] = 0x69;
+                newFtyp[21] = 0x73;
+                newFtyp[22] = 0x6f;
+                newFtyp[23] = 0x32;
+                newFtyp[24] = 0x6d;
+                newFtyp[25] = 0x70;
+                newFtyp[26] = 0x34;
+                newFtyp[27] = 0x31;
+                ftypBytes = newFtyp;
+            }
+        }
+    }
+
+    if (moovBeforeMdat && !needsFtypRewrite) {
+        return {
+            newBuffer: inputBytes.buffer,
+            newBytes: inputBytes,
+            newView: inputView,
+            changed: false,
+        };
+    }
+
+    const ftypSize =
+        needsFtypRewrite && ftypBytes
+            ? ftypBytes.length
+            : ftypBox
+              ? ftypBox.size
+              : 0;
+    const moovSize = moovBox.size;
+    const mdatSize = mdatBox.size;
+    const newSize = ftypSize + moovSize + mdatSize;
+
+    const newBuffer = new ArrayBuffer(newSize);
+    const newBytes = new Uint8Array(newBuffer);
+    const newView = new DataView(newBuffer);
+
+    let writePos = 0;
+
+    if (needsFtypRewrite && ftypBytes) {
+        newBytes.set(ftypBytes, writePos);
+        writePos += ftypBytes.length;
+    } else if (ftypBox) {
+        newBytes.set(
+            inputBytes.subarray(ftypBox.offset, ftypBox.end),
+            writePos,
+        );
+        writePos += ftypBox.size;
+    }
+
+    newBytes.set(inputBytes.subarray(moovBox.offset, moovBox.end), writePos);
+    const newMoovOffset = writePos;
+    writePos += moovBox.size;
+
+    newBytes.set(inputBytes.subarray(mdatBox.offset, mdatBox.end), writePos);
+    writePos += mdatBox.size;
+
+    const newMdatOffset = newMoovOffset + moovBox.size;
+    const chunkOffsetDelta = newMdatOffset - mdatBox.offset;
+
+    if (chunkOffsetDelta !== 0) {
+        updateChunkOffsets(
+            newBytes,
+            newView,
+            newMoovOffset +
+                getBoxHeaderSize({ offset: newMoovOffset, size: moovBox.size }),
+            newMoovOffset + moovBox.size,
+            chunkOffsetDelta,
+        );
+    }
+
+    return { newBuffer, newBytes, newView, changed: true };
+}
+
 async function patchSingleFile(item) {
     const enableInterpolation = document.getElementById("enableInterpolation");
     const resolutionEl = document.getElementById("outputResolution");
-    const targetRes = resolutionEl ? Number.parseInt(resolutionEl.value, 10) : 1080;
+    const targetRes = resolutionEl
+        ? Number.parseInt(resolutionEl.value, 10)
+        : 1080;
 
     let sourceBuffer = null;
+    let movThumbnailBuffer = null;
+
+    if (isMovFile(item.file) && !enableInterpolation?.checked) {
+        logMessage("Processing MOV file directly...", "info");
+        logMessage("Extracting thumbnail from MOV...", "info");
+        movThumbnailBuffer = await extractMovThumbnail(item.file);
+        if (isCancelled) throw new Error("Cancelled");
+    }
 
     if (enableInterpolation?.checked) {
         logMessage("Starting VFI Engine for 60fps interpolation...", "info");
@@ -842,10 +1217,13 @@ async function patchSingleFile(item) {
             targetRes,
         );
         sourceBuffer = workingBuffer;
-        logMessage("VFI interpolation complete. Proceeding to re-encode pipeline...", "success");
+        logMessage(
+            "VFI interpolation complete. Proceeding to binary patch pipeline...",
+            "success",
+        );
 
         await destroyFFmpegInstance();
-        logMessage("FFmpeg instance reset for re-encode pipeline...", "info");
+        logMessage("VFI engine reset for binary patch pipeline...", "info");
     }
 
     if (isCancelled) throw new Error("Cancelled");
@@ -854,199 +1232,71 @@ async function patchSingleFile(item) {
     if (!sourceBuffer) {
         videoInfo = await getVideoDurationAndResolution(item.file);
         if (isCancelled) throw new Error("Cancelled");
-        if (!videoInfo) {
+        if (!videoInfo && !isMovFile(item.file)) {
             throw new Error("Could not parse video metadata.");
         }
     }
 
-    const resolutionBitrate = { 1080: "14261k", 1440: "25000k" };
-    const resolutionMaxrate = { 1080: "15000k", 1440: "27000k" };
-    const resolutionBufsize = { 1080: "28000k", 1440: "50000k" };
-    const targetBitrate = resolutionBitrate[targetRes] || "14261k";
-    const targetMaxrate = resolutionMaxrate[targetRes] || "15000k";
-    const targetBufsize = resolutionBufsize[targetRes] || "28000k";
-
     const mimeType = getMimeType(item.file);
     const outputName = getOutputFilename(item.file);
 
-    let scaleFilter = null;
-    let inputExt = ".mp4";
-
-    if (videoInfo) {
-        const isLandscape = videoInfo.width > videoInfo.height;
-        scaleFilter = isLandscape
-            ? `scale=-2:${targetRes}`
-            : `scale=${targetRes}:-2`;
-
-        logMessage(
-            `  Source: ${videoInfo.width}x${videoInfo.height} (${isLandscape ? "landscape" : "portrait"}) → ${isLandscape ? `H:${targetRes}` : `W:${targetRes}`} adaptive`,
-            "info",
-        );
-        inputExt = resolveInputExtension(item.file);
-    } else {
-        logMessage(
-            `  Source: VFI 60fps output → re-encode at ${targetRes}p`,
-            "info",
-        );
-    }
-
-    logMessage("  [Pass 1/7] Running container reencode...", "info");
-
-    const instance = await getFFmpeg();
-    if (isCancelled) throw new Error("Cancelled");
-
-    const inputName = `input${inputExt}`;
-    const tempFileName = `temp${inputExt}`;
-    const outputFileName = `output${inputExt}`;
+    let inputBytes;
+    let inputView;
 
     if (sourceBuffer) {
-        await instance.writeFile(inputName, new Uint8Array(sourceBuffer));
+        inputBytes = new Uint8Array(sourceBuffer);
+        inputView = new DataView(sourceBuffer);
+        logMessage("  Source: VFI 60fps output", "info");
     } else {
-        await instance.writeFile(inputName, await fetchFile(item.file));
-    }
-    if (isCancelled) {
-        await instance.deleteFile(inputName).catch(() => {});
-        throw new Error("Cancelled");
-    }
-
-    const reencodeArgs = [
-        "-i",
-        inputName,
-    ];
-    if (scaleFilter) {
-        reencodeArgs.push("-vf", scaleFilter);
-    }
-    reencodeArgs.push(
-        "-c:v",
-        "libx264",
-        "-profile:v",
-        "main",
-        "-level",
-        "4.2",
-        "-pix_fmt",
-        "yuv420p",
-        "-b:v",
-        targetBitrate,
-        "-maxrate",
-        targetMaxrate,
-        "-bufsize",
-        targetBufsize,
-        "-g",
-        "30",
-        "-bf",
-        "2",
-        "-refs",
-        "1",
-        "-preset",
-        "medium",
-        "-c:a",
-        "aac",
-        "-b:a",
-        "250k",
-        "-ar",
-        "48000",
-        "-ac",
-        "2",
-        "-video_track_timescale",
-        "90000",
-        "-movflags",
-        "+faststart",
-        tempFileName,
-    );
-
-    if (isCancelled) {
-        await instance.deleteFile(inputName).catch(() => {});
-        await instance.deleteFile(tempFileName).catch(() => {});
-        throw new Error("Cancelled");
-    }
-
-    const logLines = [];
-    const collector = ({ message }) => logLines.push(message);
-    instance.on("log", collector);
-    try {
-        await instance.exec(reencodeArgs);
-    } catch (err) {
-        instance.off("log", collector);
-        if (!isCancelled) {
-            console.error("FFmpeg reencode error:", err);
-            console.error("FFmpeg logs:", logLines.slice(-20));
+        inputBytes = new Uint8Array(await item.file.arrayBuffer());
+        inputView = new DataView(inputBytes.buffer);
+        if (videoInfo) {
+            logMessage(
+                `  Source: ${videoInfo.width}x${videoInfo.height} (${videoInfo.width > videoInfo.height ? "landscape" : "portrait"})`,
+                "info",
+            );
+        } else {
+            logMessage(
+                "  Source: MOV file (dimensions from container)",
+                "info",
+            );
         }
-        throw err;
-    }
-    instance.off("log", collector);
-
-    if (isCancelled) {
-        await instance.deleteFile(inputName).catch(() => {});
-        await instance.deleteFile(tempFileName).catch(() => {});
-        throw new Error("Cancelled");
     }
 
-    await instance.exec([
-        "-i",
-        tempFileName,
-        "-c",
-        "copy",
-        "-map_metadata",
-        "-1",
-        "-metadata:s:v",
-        "language=und",
-        "-metadata:s:a",
-        "language=und",
-        "-metadata:s:v",
-        "handler_name=VideoHandler",
-        "-metadata:s:a",
-        "handler_name=SoundHandler",
-        "-metadata",
-        "comment=KwjYwI2DziQ8It5PyJGJgQ",
-        "-movflags",
-        "+faststart",
-        outputFileName,
-    ]);
+    logMessage("  [Pass 1/7] Normalizing container...", "info");
+    const normalized = normalizeContainer(inputBytes, inputView);
+    let finalBuffer = normalized.newBuffer;
+    let finalBytes = normalized.newBytes;
+    let finalView = normalized.newView;
 
-    await instance.deleteFile(tempFileName).catch(() => {});
-
-    if (isCancelled) {
-        await instance.deleteFile(inputName).catch(() => {});
-        await instance.deleteFile(outputFileName).catch(() => {});
-        throw new Error("Cancelled");
+    if (normalized.changed) {
+        logMessage("  [Pass 1/7] Container normalized.", "success");
+    } else {
+        logMessage("  [Pass 1/7] Container already normalized.", "info");
     }
-
-    const data = await instance.readFile(outputFileName);
-    await instance.deleteFile(inputName).catch(() => {});
-    await instance.deleteFile(outputFileName).catch(() => {});
-
-    logMessage("  [Pass 1/7] Container transform complete.", "success");
-
-    let finalBuffer = data.buffer;
-    let finalBytes = new Uint8Array(finalBuffer);
-    let finalView = new DataView(finalBuffer);
 
     const elstResult = rebuildWithElstBypass(finalBytes, finalView);
     if (elstResult) {
         finalBuffer = elstResult.newBuffer;
         finalBytes = elstResult.newBytes;
         finalView = new DataView(finalBuffer);
-        logMessage(`  [Pass 2/7] ZeroLoss Track Bypass: Applied.`, "success");
+        logMessage("  [Pass 2/7] ZeroLoss Track Bypass: Applied.", "success");
     } else {
         logMessage("  [Pass 2/7] ZeroLoss Track Bypass skipped.", "warning");
     }
 
     const quantumResult = patchMvhdMatrix(finalBytes, finalView);
     if (quantumResult && !quantumResult.skipped) {
-        logMessage(`  [Pass 3/7] Quantum Matrix: Patched.`, "success");
+        logMessage("  [Pass 3/7] Quantum Matrix: Patched.", "success");
     } else {
         logMessage("  [Pass 3/7] Quantum Matrix skipped.", "warning");
     }
 
     const udtaResult = stripUdtaAtom(finalBytes, finalView);
-    if (udtaResult) {
-        finalBuffer = udtaResult.newBuffer;
-        finalBytes = udtaResult.newBytes;
-        finalView = new DataView(finalBuffer);
-        logMessage("  [Pass 4/7] Udta Strip: Applied.", "success");
-    } else {
-        logMessage("  [Pass 4/7] Udta Strip skipped.", "warning");
-    }
+    finalBuffer = udtaResult.newBuffer;
+    finalBytes = udtaResult.newBytes;
+    finalView = new DataView(finalBuffer);
+    logMessage("  [Pass 4/7] Udta Strip: Applied.", "success");
 
     const tkhdResult = stripTkhdMatrix(finalBytes, finalView);
     if (tkhdResult.patched) {
@@ -1055,7 +1305,7 @@ async function patchSingleFile(item) {
         logMessage("  [Pass 5/7] Tkhd Matrix Zero skipped.", "warning");
     }
 
-    const inflateResult = inflateSampleTableVideo(finalBytes, finalView, 5);
+    const inflateResult = inflateSampleTableVideo(finalBytes, finalView, 10);
     if (inflateResult) {
         finalBuffer = inflateResult.newBuffer;
         finalBytes = inflateResult.newBytes;
@@ -1079,7 +1329,13 @@ async function patchSingleFile(item) {
         logMessage("  [Pass 7/7] Comment Udta Injection skipped.", "warning");
     }
 
-    return { finalBuffer, outputName, mimeType };
+    return {
+        finalBuffer,
+        outputName,
+        mimeType,
+        prePatchBuffer: sourceBuffer,
+        movThumbnailBuffer,
+    };
 }
 
 async function downloadSelectedFiles() {
@@ -1225,19 +1481,58 @@ patchBtn.addEventListener("click", async () => {
 
             if (
                 result.finalBuffer &&
-                result.finalBuffer.byteLength !== undefined &&
-                result.finalBuffer.byteLength <= MAX_STORAGE_BYTES
+                result.finalBuffer.byteLength !== undefined
             ) {
                 try {
                     if (isCancelled) break;
                     const blob = new Blob([result.finalBuffer], {
                         type: result.mimeType,
                     });
-                    let thumbnail = await captureVideoFrame(blob);
-                    if (isCancelled) break;
+
+                    let thumbnail = null;
+                    if (result.movThumbnailBuffer) {
+                        const thumbBytes = new Uint8Array(
+                            result.movThumbnailBuffer,
+                        );
+                        let binary = "";
+                        for (let j = 0; j < thumbBytes.length; j++) {
+                            binary += String.fromCharCode(thumbBytes[j]);
+                        }
+                        thumbnail = `data:image/jpeg;base64,${btoa(binary)}`;
+                        logMessage(
+                            "Thumbnail captured from MOV extraction",
+                            "info",
+                        );
+                    }
                     if (!thumbnail) {
+                        try {
+                            thumbnail = await captureVideoFrame(blob);
+                            if (thumbnail) {
+                                logMessage(
+                                    "Thumbnail captured from output",
+                                    "info",
+                                );
+                            }
+                        } catch (_) {
+                            // HEVC output can't be decoded by browser
+                        }
+                    }
+                    if (!thumbnail && !isMovFile(item.file)) {
                         thumbnail = await captureVideoFrame(item.file);
-                        if (isCancelled) break;
+                        if (thumbnail) {
+                            logMessage(
+                                "Thumbnail captured from original file",
+                                "info",
+                            );
+                        }
+                    }
+                    if (isCancelled) break;
+
+                    if (!thumbnail) {
+                        logMessage(
+                            "Warning: No thumbnail available for history entry",
+                            "warning",
+                        );
                     }
                     await saveRecord({
                         id: self.crypto.randomUUID(),
@@ -1319,7 +1614,7 @@ async function renderHistoryList() {
     historyBadge.textContent = records.length;
 
     if (records.length === 0) {
-        historyList.innerHTML = `<div class="history-item-empty" style="font-size: 10px; color: #657c6a; text-align: center; padding: 12px 0; font-family: 'JetBrains Mono', monospace;">No history records found</div>`;
+        historyList.innerHTML = `<div class="history-item-empty">No history records found</div>`;
         refreshIcons();
         return;
     }
@@ -1330,10 +1625,7 @@ async function renderHistoryList() {
 
         const thumb = document.createElement("div");
         thumb.className = "history-thumbnail";
-        if (
-            record.thumbnail &&
-            record.thumbnail.startsWith(SAFE_THUMBNAIL_PREFIX)
-        ) {
+        if (record.thumbnail?.startsWith(SAFE_THUMBNAIL_PREFIX)) {
             const img = document.createElement("img");
             img.src = record.thumbnail;
             img.alt = "preview";
@@ -1431,16 +1723,28 @@ const cancelVfiBtn = document.getElementById("cancelVfiBtn");
 const confirmVfiBtn = document.getElementById("confirmVfiBtn");
 
 if (enableInterpolation && vfiModal) {
+    const resolutionBox = document.getElementById("vfiResolutionBox");
+
     enableInterpolation.addEventListener("change", () => {
         if (enableInterpolation.checked) {
             vfiModal.classList.add("active");
             lockScroll();
+        }
+        if (resolutionBox) {
+            resolutionBox.style.display = enableInterpolation.checked
+                ? "block"
+                : "none";
         }
     });
 
     const closeModal = () => {
         vfiModal.classList.remove("active");
         unlockScroll();
+        if (resolutionBox) {
+            resolutionBox.style.display = enableInterpolation.checked
+                ? "block"
+                : "none";
+        }
     };
 
     const cancelModal = () => {

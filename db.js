@@ -94,35 +94,7 @@ export async function clearAllRecords() {
 }
 
 export async function pruneOldRecords() {
-    const db = await openDB();
-    const HISTORY_EXPIRY_MS = 43200000;
-    const expiryTime = Date.now() - HISTORY_EXPIRY_MS;
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction(STORE_NAME, "readwrite");
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.getAll();
-
-        request.onsuccess = (event) => {
-            const records = event.target.result;
-            const deletePromises = [];
-            for (const record of records) {
-                if (record.timestamp < expiryTime) {
-                    deletePromises.push(
-                        new Promise((res, rej) => {
-                            const delReq = store.delete(record.id);
-                            delReq.onsuccess = () => res();
-                            delReq.onerror = (e) => rej(e.target.error);
-                        }),
-                    );
-                }
-            }
-            Promise.all(deletePromises).then(resolve).catch(reject);
-        };
-
-        request.onerror = (event) => {
-            reject(event.target.error);
-        };
-    });
+    return Promise.resolve();
 }
 
 export async function getHistoryTotalSize() {

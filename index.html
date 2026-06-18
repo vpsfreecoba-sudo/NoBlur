@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NoBlur — Post TikTok Videos Without the Blur</title>
-  <meta name="description" content="NoBlur - Post TikTok Videos Without the Blur. FFmpeg re-encode and frame density bypass engine to preserve video quality when uploading to TikTok.">
+  <meta name="description" content="NoBlur - Post TikTok Videos Without the Blur. Frame density bypass engine to preserve video quality when uploading to TikTok.">
   <link href="https://fonts.googleapis.com/css2?family=TikTok+Sans:wght@300..900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect x=%2212%22 y=%2212%22 width=%2276%22 height=%2276%22 rx=%2216%22 fill=%22%23000000%22/><rect x=%224%22 y=%224%22 width=%2276%22 height=%2276%22 rx=%2216%22 fill=%22%23facc15%22 stroke=%22%23000000%22 stroke-width=%226%22/><text x=%2242%22 y=%2260%22 font-family=%22'JetBrains Mono', monospace%22 font-weight=%22900%22 font-size=%2252%22 fill=%22%23000000%22 text-anchor=%22middle%22>N</text></svg>">
   <link rel="stylesheet" href="style.css">
@@ -17,9 +17,7 @@
   <script type="importmap">
   {
     "imports": {
-      "lucide": "https://esm.sh/lucide@0.475.0",
-      "@ffmpeg/ffmpeg": "https://esm.sh/@ffmpeg/ffmpeg@0.12.15",
-      "@ffmpeg/util": "https://esm.sh/@ffmpeg/util@0.12.2"
+      "lucide": "https://esm.sh/lucide@0.475.0"
     }
   }
   </script>
@@ -31,40 +29,13 @@
     <div class="panel panel-left">
       <div class="header">
         <div class="header-title">No<span>Blur</span></div>
-        <div class="header-subtitle">Post TikTok Videos Without the Blur &middot; FFmpeg re-encode &amp; frame density bypass engine.</div>
+        <div class="header-subtitle">Post TikTok Videos Without the Blur &middot; Frame density bypass engine.</div>
       </div>
 
       <div class="control-box">
-        <div class="system-stats">
-          <div class="stat-item">
-            <span class="stat-label">PROCESSING ENGINE</span>
-            <span class="stat-value text-accent">ACTIVE</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">METHOD</span>
-            <span class="stat-value">FFMPEG RE-ENCODE</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">OUTPUT</span>
-            <span class="stat-value stat-value-small text-success">H.264 + FRAME DENSITY INFLATION + METADATA STRIP</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">DENSITY MULTIPLIER</span>
-            <span class="stat-value text-accent">5x</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">OUTPUT RESOLUTION</span>
-            <select class="stat-select" id="outputResolution">
-              <option value="1080" selected>1080p</option>
-              <option value="1440">2K (1440p)</option>
-            </select>
-          </div>
-        </div>
-
         <div class="interpolator-box">
           <div class="interpolator-header">
-            <span class="interpolator-title">60FPS HYBRID INTERPOLATOR</span>
-            <span class="badge-beta">BETA</span>
+            <span class="interpolator-title">VIDEO SETTING</span>
           </div>
           <div class="interpolator-options">
             <label class="checkbox-container">
@@ -72,6 +43,15 @@
               <span class="checkmark"></span>
               <span class="label-text">Enable 60fps Interpolation</span>
             </label>
+          </div>
+          <div class="interpolator-resolution" id="vfiResolutionBox" style="display: none;">
+            <div class="stat-item">
+              <span class="stat-label">OUTPUT RESOLUTION</span>
+              <select class="stat-select" id="outputResolution">
+                <option value="1080" selected>1080p</option>
+                <option value="1440">2K (1440p)</option>
+              </select>
+            </div>
           </div>
           <div class="interpolator-info">
             <div class="interpolator-note">
@@ -133,10 +113,6 @@
           </button>
         </div>
         <div class="history-drawer" id="historyDrawer">
-          <div class="history-note">
-            <i data-lucide="info"></i>
-            <span>Local history is pruned after 12 hours. Files exceeding 200MB bypass persistent storage.</span>
-          </div>
           <div class="history-list" id="historyList"></div>
           <div class="history-actions">
             <button class="btn-clear-history" id="clearHistoryBtn">Clear History</button>
@@ -167,7 +143,6 @@
         <div class="modal-header-left">
           <i data-lucide="zap"></i>
           <span class="modal-title">60FPS INTERPOLATION</span>
-          <span class="badge-beta">BETA</span>
         </div>
         <button class="modal-close-btn" id="closeVfiModalBtn">
           <i data-lucide="x"></i>
@@ -183,7 +158,7 @@
           <li>Low-end CPUs may take several minutes per video.</li>
           <li>Multi-core CPUs yield significantly faster results.</li>
           <li>Strict 30-second video duration limit is enforced.</li>
-          <li>Output is scaled to Full HD (1080p) regardless of source resolution.</li>
+          <li>Output resolution is controlled by the selector above.</li>
         </ul>
         <div class="modal-footer-note">
           By enabling this feature you acknowledge that processing time is not guaranteed and may vary significantly based on your hardware capabilities.
