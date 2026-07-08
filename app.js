@@ -52,7 +52,7 @@ const ALL_ICONS = {
     TriangleAlert,
 };
 
-const outputSuffix = "_byNoBlur → @wymidk0";
+const outputSuffix = "_NoBlur → @wymidk0";
 const supportedMimeTypes = [
     "video/mp4",
     "video/quicktime",
@@ -77,6 +77,8 @@ let selectedFiles = [];
 let currentFlowState = "idle";
 let isCancelled = false;
 let processingFiles = false;
+let lastPatchedVfi = false;
+let lastPatchedRes = "1080";
 
 let lastWidth = null;
 function adjustMobileLayout() {
@@ -442,12 +444,35 @@ function removeFile(index) {
 
 function updatePatchButton() {
     if (currentFlowState === "completed") {
-        const checkedCount = selectedFiles.filter(
-            (f) => f.status === "success" && f.checked && f.patchedBuffer,
-        ).length;
-        patchBtn.disabled = checkedCount === 0;
-        const label = `Download Selected (${checkedCount})`;
-        patchBtn.querySelector("span").textContent = label;
+        const currentVfi = !!enableInterpolation?.checked;
+        const currentRes =
+            document.getElementById("outputResolution")?.value || "1080";
+        const settingsChanged =
+            currentVfi !== lastPatchedVfi || currentRes !== lastPatchedRes;
+
+        if (settingsChanged) {
+            patchBtn.disabled = false;
+            patchBtn.querySelector("span").textContent = "Repatch";
+        } else {
+            const checkedCount = selectedFiles.filter(
+                (f) => f.status === "success" && f.checked && f.patchedBuffer,
+            ).length;
+            const failedCount = selectedFiles.filter(
+                (f) => f.status === "error",
+            ).length;
+            if (checkedCount === 0 && failedCount > 0) {
+                patchBtn.disabled = false;
+                const label =
+                    failedCount > 1
+                        ? `Retry Failed (${failedCount})`
+                        : "Retry Failed";
+                patchBtn.querySelector("span").textContent = label;
+            } else {
+                patchBtn.disabled = checkedCount === 0;
+                const label = `Download Selected (${checkedCount})`;
+                patchBtn.querySelector("span").textContent = label;
+            }
+        }
     } else {
         const pendingCount = selectedFiles.filter(
             (f) => f.status === "pending",
@@ -1215,14 +1240,53 @@ document.addEventListener("visibilitychange", () => {
 
 patchBtn.addEventListener("click", async () => {
     if (currentFlowState === "completed") {
-        await downloadSelectedFiles();
-        return;
+        const currentVfi = !!enableInterpolation?.checked;
+        const currentRes =
+            document.getElementById("outputResolution")?.value || "1080";
+        const settingsChanged =
+            currentVfi !== lastPatchedVfi || currentRes !== lastPatchedRes;
+
+        if (settingsChanged) {
+            for (const item of selectedFiles) {
+                if (item.status === "success" || item.status === "error") {
+                    item.status = "pending";
+                    item.checked = true;
+                    item.patchedBuffer = null;
+                }
+            }
+            currentFlowState = "idle";
+            renderFileList();
+            updatePatchButton();
+        } else {
+            const checkedCount = selectedFiles.filter(
+                (f) => f.status === "success" && f.checked && f.patchedBuffer,
+            ).length;
+            if (checkedCount > 0) {
+                await downloadSelectedFiles();
+                return;
+            }
+            const failedItems = selectedFiles.filter(
+                (f) => f.status === "error",
+            );
+            if (failedItems.length > 0) {
+                for (const item of failedItems) {
+                    item.status = "pending";
+                    item.checked = true;
+                }
+                currentFlowState = "idle";
+                renderFileList();
+                updatePatchButton();
+            }
+        }
     }
 
     const pendingItems = selectedFiles.filter((f) => f.status === "pending");
     if (pendingItems.length === 0) return;
 
     currentFlowState = "patching";
+    lastPatchedVfi = !!enableInterpolation?.checked;
+    lastPatchedRes =
+        document.getElementById("outputResolution")?.value || "1080";
     clearLog();
     patchBtn.disabled = true;
     clearBtn.innerText = "Cancel";
@@ -1513,7 +1577,15 @@ if (enableInterpolation && vfiModal) {
                 ? "block"
                 : "none";
         }
+        updatePatchButton();
     });
+
+    const outputResolution = document.getElementById("outputResolution");
+    if (outputResolution) {
+        outputResolution.addEventListener("change", () => {
+            updatePatchButton();
+        });
+    }
 
     const closeModal = () => {
         vfiModal.classList.remove("active");
