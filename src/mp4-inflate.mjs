@@ -48,7 +48,7 @@ function findVideoStbl(bytes, view, moovBox) {
             trak.end,
         );
         const mdiaBox = trakChildren.find((b) => b.type === "mdia");
-        if (!mdiaBox) continue;
+        if (!mdiaBox) { console.warn("inflate: no mdia"); continue; }
 
         const mdiaChildren = parseBoxes(
             bytes,
@@ -57,12 +57,15 @@ function findVideoStbl(bytes, view, moovBox) {
             mdiaBox.end,
         );
         const hdlrBox = mdiaChildren.find((b) => b.type === "hdlr");
-        if (!hdlrBox) continue;
+        if (!hdlrBox) { console.warn("inflate: no hdlr"); continue; }
 
-        if (findHandlerType(bytes, hdlrBox) !== "vide") continue;
+        if (findHandlerType(bytes, hdlrBox) !== "vide") {
+            console.warn("inflate: not vide track");
+            continue;
+        }
 
         const minfBox = mdiaChildren.find((b) => b.type === "minf");
-        if (!minfBox) continue;
+        if (!minfBox) { console.warn("inflate: no minf"); continue; }
 
         const minfChildren = parseBoxes(
             bytes,
@@ -274,11 +277,11 @@ export function inflateSampleTableVideo(inputBytes, inputView, multiplier = 5) {
     const fileSize = inputBytes.length;
     const topBoxes = parseBoxes(inputBytes, inputView, 0, fileSize);
     const moovBox = topBoxes.find((b) => b.type === "moov");
-    if (!moovBox) return null;
-    if (multiplier < 2) return null;
+    if (!moovBox) { console.warn("inflate: moov not found"); return null; }
+    if (multiplier < 2) { console.warn("inflate: multiplier < 2"); return null; }
 
     const located = findVideoStbl(inputBytes, inputView, moovBox);
-    if (!located) return null;
+    if (!located) { console.warn("inflate: video stbl not found"); return null; }
 
     const { stblBox } = located;
     const stblChildren = parseBoxes(
