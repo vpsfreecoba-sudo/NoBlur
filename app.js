@@ -679,6 +679,8 @@ async function getFFmpeg() {
     ffmpegInstance.on("progress", ({ progress }) => {
         setProgress(Math.round(progress * 100));
     });
+    showProgress();
+    progressBar.classList.add("indeterminate");
     try {
         const loadConfig = {
             coreURL: `${baseURL}/ffmpeg-core.js`,
@@ -796,6 +798,7 @@ async function runVFI(file, width, height, targetRes = 1080) {
             if (tail) logMessage(tail, "error");
             await instance.deleteFile(inputName).catch(() => {});
             await instance.deleteFile(outputName).catch(() => {});
+            progressBar.classList.remove("indeterminate");
             throw new Error("VFI ffmpeg failed with exit code " + ret);
         }
 
@@ -805,6 +808,7 @@ async function runVFI(file, width, height, targetRes = 1080) {
             logMessage("VFI produced empty or invalid output.", "error");
             await instance.deleteFile(inputName).catch(() => {});
             await instance.deleteFile(outputName).catch(() => {});
+            progressBar.classList.remove("indeterminate");
             throw new Error("VFI produced no output");
         }
         const head = String.fromCharCode(...data.slice(4, 12));
@@ -812,6 +816,7 @@ async function runVFI(file, width, height, targetRes = 1080) {
 
         await instance.deleteFile(inputName).catch(() => {});
         await instance.deleteFile(outputName).catch(() => {});
+        progressBar.classList.remove("indeterminate");
 
         return data.slice().buffer;
     } catch (err) {
