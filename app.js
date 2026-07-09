@@ -1034,7 +1034,6 @@ function normalizeContainer(inputBytes, inputView) {
 }
 
 async function patchSingleFile(item) {
-    const enableInterpolation = document.getElementById("enableInterpolation");
     const resolutionEl = document.getElementById("outputResolution");
     const targetRes = resolutionEl
         ? Number.parseInt(resolutionEl.value, 10)
