@@ -806,6 +806,47 @@ async function runVFI(file, width, height, targetRes = 1080) {
     }
 }
 
+async function extractMovThumbnailFFmpeg(file) {
+    const { fetchFile } = await import("@ffmpeg/util");
+    let instance;
+    try {
+        instance = await getFFmpeg();
+        const ext = isMovFile(file) ? ".mov" : ".mp4";
+        const inputName = `thumb_input${ext}`;
+        await instance.writeFile(inputName, await fetchFile(file));
+        await instance.exec([
+            "-y",
+            "-loglevel",
+            "error",
+            "-ss",
+            "0.1",
+            "-i",
+            inputName,
+            "-vframes",
+            "1",
+            "-f",
+            "mjpeg",
+            "thumb.jpg",
+        ]);
+        const data = await instance.readFile("thumb.jpg");
+        await instance.deleteFile(inputName).catch(() => {});
+        await instance.deleteFile("thumb.jpg").catch(() => {});
+        if (data && data.length > 100) {
+            const bytes = new Uint8Array(data.buffer, data.byteOffset, data.length);
+            let binary = "";
+            for (let j = 0; j < bytes.length; j++) {
+                binary += String.fromCharCode(bytes[j]);
+            }
+            return `data:image/jpeg;base64,${btoa(binary)}`;
+        }
+    } catch (_) {
+        return null;
+    } finally {
+        await destroyFFmpegInstance();
+    }
+    return null;
+}
+
 function detectVideoCodecFromMoov(bytes, view, moovBox) {
     const moovChildren = parseBoxes(
         bytes,
@@ -1069,8 +1110,8 @@ async function patchSingleFile(item) {
 
         if (codec === "hvc1" || codec === "hev1") {
             logMessage(
-                `Warning: HEVC MOV (${codec}) may not be supported by ffmpeg.wasm. Skipping VFI and using direct inflation.`,
-                "warning"
+                `HEVC MOV (${codec}) detected - using multi-thread VFI engine.`,
+                "info"
             );
         } else {
             logMessage(
@@ -1080,22 +1121,28 @@ async function patchSingleFile(item) {
         }
         if (isCancelled) throw new Error("Cancelled");
 
-        if (codec !== "hvc1" && codec !== "hev1") {
-            logMessage("Loading VFI engine...", "info");
-            const workingBuffer = await runVFI(
-                item.file,
-                dims.width,
-                dims.height,
-                targetRes,
-            );
-            sourceBuffer = workingBuffer;
-            logMessage(
-                "VFI interpolation complete. Proceeding to binary patch pipeline...",
-                "success",
-            );
+        logMessage("Loading VFI engine...", "info");
+        const workingBuffer = await runVFI(
+            item.file,
+            dims.width,
+            dims.height,
+            targetRes,
+        );
+        sourceBuffer = workingBuffer;
+        logMessage(
+            "VFI interpolation complete. Proceeding to binary patch pipeline...",
+            "success",
+        );
 
-            await destroyFFmpegInstance();
-            logMessage("VFI engine reset for binary patch pipeline...", "info");
+        await destroyFFmpegInstance();
+        logMessage("VFI engine reset for binary patch pipeline...", "info");
+
+        if (codec === "hvc1" || codec === "hev1") {
+            try {
+                movThumbnail = await extractMovThumbnailFFmpeg(item.file);
+            } catch (_) {
+                movThumbnail = null;
+            }
         }
 
     }
