@@ -1299,25 +1299,25 @@ async function patchSingleFile(item) {
         }
     }
 
-    logMessage("  [Pass 1/1] Normalizing container...", "info");
+    logMessage("  Normalizing container...", "info");
     const normalized = normalizeContainer(inputBytes, inputView);
     let finalBuffer = normalized.newBuffer;
     let finalBytes = normalized.newBytes;
     let finalView = normalized.newView;
 
     if (normalized.changed) {
-        logMessage("  [Pass 1/1] Container normalized.", "success");
+        logMessage("  Container normalized.", "success");
     } else if (!normalized.valid) {
         throw new Error("Invalid container: moov box not found");
     } else {
-        logMessage("  [Pass 1/1] Container already normalized.", "info");
+        logMessage("  Container already normalized.", "info");
     }
 
     const inflateResult = inflateSampleTableVideo(finalBytes, finalView, 10);
     finalBuffer = inflateResult.newBuffer;
     finalBytes = inflateResult.newBytes;
     finalView = new DataView(finalBuffer);
-    logMessage("  [Pass 1/1] Frame Density Inflation: Applied.", "success");
+    logMessage("  Frame Density Inflation: Applied.", "success");
 
     return {
         finalBuffer,
