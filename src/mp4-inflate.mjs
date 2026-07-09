@@ -286,20 +286,11 @@ export function inflateSampleTableVideo(inputBytes, inputView, multiplier = 5) {
     const fileSize = inputBytes.length;
     const topBoxes = parseBoxes(inputBytes, inputView, 0, fileSize);
     const moovBox = topBoxes.find((b) => b.type === "moov");
-    if (!moovBox) {
-        console.warn("inflate: moov not found");
-        return null;
-    }
-    if (multiplier < 2) {
-        console.warn("inflate: multiplier < 2");
-        return null;
-    }
+    if (!moovBox) throw new Error("Moov box not found");
+    if (multiplier < 2) throw new Error("Multiplier < 2");
 
     const located = findVideoStbl(inputBytes, inputView, moovBox);
-    if (!located) {
-        console.warn("inflate: video stbl not found");
-        return null;
-    }
+    if (!located) throw new Error("Video track not found");
 
     const { stblBox } = located;
     const stblChildren = parseBoxes(
