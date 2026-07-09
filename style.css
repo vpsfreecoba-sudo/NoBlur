@@ -476,12 +476,12 @@ body {
 
 .brutalist-upload-box svg,
 .brutalist-upload-box i {
-    width: 26px;
-    height: 26px;
-    stroke: #000000;
-    stroke-width: 2.5;
-    fill: none;
-    display: block;
+    font-size: 26px;
+    line-height: 1;
+    color: #000000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .drop-text {

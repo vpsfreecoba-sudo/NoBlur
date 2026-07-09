@@ -1,17 +1,4 @@
 import {
-    ChevronDown,
-    Cpu,
-    Download,
-    FileVideo,
-    Info,
-    Trash2,
-    TriangleAlert,
-    Upload,
-    X,
-    Zap,
-    createIcons,
-} from "lucide";
-import {
     clearAllRecords,
     deleteRecord,
     getAllRecords,
@@ -38,19 +25,6 @@ const PATCH_INTERVAL_MS = 600;
 const MOBILE_SCROLL_DELAY_MS = 150;
 const DOWNLOAD_ANCHOR_CLEANUP_MS = 100;
 const SAFE_THUMBNAIL_PREFIX = "data:image/jpeg;base64,";
-
-const ALL_ICONS = {
-    Upload,
-    X,
-    FileVideo,
-    Info,
-    ChevronDown,
-    Trash2,
-    Download,
-    Cpu,
-    Zap,
-    TriangleAlert,
-};
 
 const outputSuffix = "_NoBlur → @wymidk0";
 const supportedMimeTypes = [
@@ -102,14 +76,7 @@ function adjustMobileLayout() {
     }
 }
 
-function refreshIcons() {
-    createIcons({
-        icons: ALL_ICONS,
-    });
-}
-
 function initializeApp() {
-    refreshIcons();
     renderHistoryList();
     adjustMobileLayout();
     window.addEventListener("resize", adjustMobileLayout);
@@ -380,7 +347,7 @@ function renderFileList() {
         const icon = document.createElement("div");
         icon.className = "file-item-icon";
         const iconEl = document.createElement("i");
-        iconEl.setAttribute("data-lucide", "file-video");
+        iconEl.className = "ri-movie-2-fill";
         icon.appendChild(iconEl);
 
         row.appendChild(icon);
@@ -398,7 +365,7 @@ function renderFileList() {
             const removeBtn = document.createElement("button");
             removeBtn.className = "file-remove-btn";
             const removeIcon = document.createElement("i");
-            removeIcon.setAttribute("data-lucide", "x");
+            removeIcon.className = "ri-close-fill";
             removeBtn.appendChild(removeIcon);
             removeBtn.addEventListener("click", (event) => {
                 event.stopPropagation();
@@ -1152,7 +1119,11 @@ async function patchSingleFile(item) {
         inputView = new DataView(inputBytes.buffer);
         if (videoInfo) {
             logMessage(
-                `  Source: ${videoInfo.width}x${videoInfo.height} (${videoInfo.width > videoInfo.height ? "landscape" : "portrait"})`,
+                `  Source: ${videoInfo.width}x${videoInfo.height} (${
+                    videoInfo.width > videoInfo.height
+                        ? "landscape"
+                        : "portrait"
+                })`,
                 "info",
             );
         } else {
@@ -1490,7 +1461,7 @@ patchBtn.addEventListener("click", async () => {
         logMessage("Interpolation progress cancelled by user.", "warning");
         renderFileList();
         updatePatchButton();
-        refreshIcons();
+        // Remix Icon CSS handles rendering
         return;
     }
 
@@ -1518,7 +1489,7 @@ async function renderHistoryList() {
 
     if (records.length === 0) {
         historyList.innerHTML = `<div class="history-item-empty">No history records found</div>`;
-        refreshIcons();
+        // Remix Icon CSS handles rendering
         return;
     }
 
@@ -1535,7 +1506,7 @@ async function renderHistoryList() {
             thumb.appendChild(img);
         } else {
             const icon = document.createElement("i");
-            icon.setAttribute("data-lucide", "file-video");
+            icon.className = "ri-movie-2-fill";
             thumb.appendChild(icon);
         }
 
@@ -1548,7 +1519,9 @@ async function renderHistoryList() {
 
         const meta = document.createElement("div");
         meta.className = "history-item-meta";
-        meta.textContent = `${formatFileSize(record.size)} • ${new Date(record.timestamp).toLocaleTimeString()}`;
+        meta.textContent = `${formatFileSize(record.size)} • ${new Date(
+            record.timestamp,
+        ).toLocaleTimeString()}`;
 
         body.appendChild(name);
         body.appendChild(meta);
@@ -1559,7 +1532,7 @@ async function renderHistoryList() {
         const dlBtn = document.createElement("button");
         dlBtn.className = "history-btn";
         const dlIcon = document.createElement("i");
-        dlIcon.setAttribute("data-lucide", "download");
+        dlIcon.className = "ri-download-fill";
         dlBtn.appendChild(dlIcon);
         dlBtn.addEventListener("click", () => {
             downloadBuffer(
@@ -1572,7 +1545,7 @@ async function renderHistoryList() {
         const delBtn = document.createElement("button");
         delBtn.className = "history-btn history-btn-delete";
         const delIcon = document.createElement("i");
-        delIcon.setAttribute("data-lucide", "trash-2");
+        delIcon.className = "ri-delete-bin-fill";
         delBtn.appendChild(delIcon);
         delBtn.addEventListener("click", async () => {
             await deleteRecord(record.id);

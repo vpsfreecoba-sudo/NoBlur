@@ -42,7 +42,11 @@ function main() {
 
         mkdirSync(dirname(OUTPUT_PATH), { recursive: true });
 
-        const output = `export const changelogData = ${JSON.stringify(changelogData, null, 2)};\n`;
+        const output = `export const changelogData = ${JSON.stringify(
+            changelogData,
+            null,
+            2,
+        )};\n`;
         writeFileSync(OUTPUT_PATH, output, "utf-8");
 
         console.log(
