@@ -1147,14 +1147,10 @@ async function patchSingleFile(item) {
     }
 
     const inflateResult = inflateSampleTableVideo(finalBytes, finalView, 10);
-    if (inflateResult) {
-        finalBuffer = inflateResult.newBuffer;
-        finalBytes = inflateResult.newBytes;
-        finalView = new DataView(finalBuffer);
-        logMessage("  [Pass 1/1] Frame Density Inflation: Applied.", "success");
-    } else {
-        logMessage("  [Pass 1/1] Frame Density Inflation skipped.", "warning");
-    }
+    finalBuffer = inflateResult.newBuffer;
+    finalBytes = inflateResult.newBytes;
+    finalView = new DataView(finalBuffer);
+    logMessage("  [Pass 1/1] Frame Density Inflation: Applied.", "success");
 
     return {
         finalBuffer,

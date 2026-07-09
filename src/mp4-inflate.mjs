@@ -305,8 +305,10 @@ export function inflateSampleTableVideo(inputBytes, inputView, multiplier = 5) {
     const stcoBox = stblChildren.find((b) => b.type === "stco");
     const co64Box = stblChildren.find((b) => b.type === "co64");
     const stscBox = stblChildren.find((b) => b.type === "stsc");
-    if (!sttsBox || !stszBox || !stscBox) return null;
-    if (!stcoBox && !co64Box) return null;
+    if (!sttsBox || !stszBox || !stscBox)
+        throw new Error("Required sample table box missing");
+    if (!stcoBox && !co64Box)
+        throw new Error("Chunk offset box (stco/co64) missing");
 
     const sttsEntryCount = inputView.getUint32(sttsBox.offset + 12, false);
     let realCount = 0;
@@ -318,7 +320,7 @@ export function inflateSampleTableVideo(inputBytes, inputView, multiplier = 5) {
         realCount += count;
         totalDuration += count * delta;
     }
-    if (realCount === 0) return null;
+    if (realCount === 0) throw new Error("No video samples found");
     const sampleDelta = Math.round(totalDuration / realCount);
 
     const codec = detectCodec(

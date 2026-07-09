@@ -13,18 +13,18 @@
     }
   </script>
   <script src="./coi-serviceworker.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@4.6.0/fonts/remixicon.css">
 
   <script type="importmap">
   {
     "imports": {
-      "lucide": "https://esm.sh/lucide@0.475.0",
       "@ffmpeg/util": "https://esm.sh/@ffmpeg/util@0.12.2",
       "@ffmpeg/ffmpeg": "https://esm.sh/@ffmpeg/ffmpeg@0.12.15"
     }
   }
   </script>
-  <script type="module" crossorigin src="./assets/index-CYuXZ5gG.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-CkE_iFOh.css">
+  <script type="module" crossorigin src="./assets/index-CfUJxljX.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-DyEtdsTB.css">
 </head>
 <body>
 
@@ -60,7 +60,7 @@
           </div>
           <div class="interpolator-info">
             <div class="interpolator-note">
-              <i data-lucide="cpu"></i>
+              <i class="ri-cpu-fill"></i>
               <span>Processing speed depends on your device hardware. Multi-core CPU recommended for faster results.</span>
             </div>
           </div>
@@ -71,7 +71,7 @@
     <div class="panel panel-right">
       <div class="drop-zone" id="dropZone">
         <div class="brutalist-upload-box">
-          <i data-lucide="upload"></i>
+          <i class="ri-upload-2-fill"></i>
         </div>
         <div class="drop-text">
           <div class="drop-text-primary">DROP VIDEOS HERE</div>
@@ -98,7 +98,7 @@
             Upload to TikTok Studio
           </a>
           <div class="upload-note">
-            <i data-lucide="info"></i>
+            <i class="ri-information-fill"></i>
             <span>Upload patched video via TikTok Studio web to ensure quality-preservation bypass works.</span>
           </div>
           <div class="progress-track" id="progressTrack">
@@ -114,7 +114,7 @@
             <span class="history-badge" id="historyBadge">0</span>
           </div>
           <button class="history-toggle-btn" id="historyToggleBtn">
-            <i data-lucide="chevron-down"></i>
+            <i class="ri-arrow-down-s-fill"></i>
           </button>
         </div>
         <div class="history-drawer" id="historyDrawer">
@@ -131,6 +131,10 @@
     <div class="panel panel-log">
       <div class="log-header">
         <span class="log-title">SYSTEM STATUS LOG</span>
+        <span class="log-copy-toast" id="copyLogToast">Copied</span>
+        <button class="log-copy-btn" id="copyLogBtn" title="Copy log">
+          <i class="ri-clipboard-fill"></i>
+        </button>
       </div>
       <div class="status-log" id="statusLog"></div>
     </div>
@@ -146,16 +150,16 @@
     <div class="modal-card">
       <div class="modal-header">
         <div class="modal-header-left">
-          <i data-lucide="zap"></i>
+          <i class="ri-flashlight-fill"></i>
           <span class="modal-title">60FPS INTERPOLATION</span>
         </div>
         <button class="modal-close-btn" id="closeVfiModalBtn">
-          <i data-lucide="x"></i>
+          <i class="ri-close-fill"></i>
         </button>
       </div>
       <div class="modal-body">
         <div class="modal-warning-block">
-          <i data-lucide="triangle-alert"></i>
+          <i class="ri-alert-fill"></i>
           <span>Performance Warning</span>
         </div>
         <ul class="modal-warning-list">
@@ -178,16 +182,16 @@
     <div class="modal-card">
       <div class="modal-header">
         <div class="modal-header-left">
-          <i data-lucide="upload"></i>
+          <i class="ri-upload-2-fill"></i>
           <span class="modal-title">UPLOAD TO TIKTOK STUDIO</span>
         </div>
         <button class="modal-close-btn" id="closeTiktokModalBtn">
-          <i data-lucide="x"></i>
+          <i class="ri-close-fill"></i>
         </button>
       </div>
       <div class="modal-body">
         <div class="modal-warning-block">
-          <i data-lucide="info"></i>
+          <i class="ri-information-fill"></i>
           <span>Enable Desktop Mode First</span>
         </div>
         <ul class="modal-warning-list">
