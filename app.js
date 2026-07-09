@@ -777,10 +777,34 @@ async function runVFI(file, width, height, targetRes = 1080) {
             outputName,
         ];
 
-        await instance.exec(args);
+        let ffmpegError = "";
+        const logHandler = ({ message }) => {
+            if (/error|invalid|unable|cannot|failed/i.test(message))
+                ffmpegError += message + "\n";
+        };
+        instance.on("log", logHandler);
+
+        const ret = await instance.exec(args);
+        instance.off?.("log", logHandler);
+        if (ret !== 0) {
+            const tail = ffmpegError.trim().split("\n").slice(-6).join("\n");
+            logMessage("VFI ffmpeg failed (exit " + ret + "):", "error");
+            if (tail) logMessage(tail, "error");
+            await instance.deleteFile(inputName).catch(() => {});
+            await instance.deleteFile(outputName).catch(() => {});
+            throw new Error("VFI ffmpeg failed with exit code " + ret);
+        }
 
         logMessage("Completed frame processing.", "success");
         const data = await instance.readFile(outputName);
+        if (!data || data.length < 100) {
+            logMessage("VFI produced empty or invalid output.", "error");
+            await instance.deleteFile(inputName).catch(() => {});
+            await instance.deleteFile(outputName).catch(() => {});
+            throw new Error("VFI produced no output");
+        }
+        const head = String.fromCharCode(...data.slice(4, 12));
+        logMessage(`  VFI output: ${data.length} bytes, head="${head}"`, "info");
 
         await instance.deleteFile(inputName).catch(() => {});
         await instance.deleteFile(outputName).catch(() => {});
