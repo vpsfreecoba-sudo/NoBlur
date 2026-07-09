@@ -785,7 +785,7 @@ async function runVFI(file, width, height, targetRes = 1080) {
         await instance.deleteFile(inputName).catch(() => {});
         await instance.deleteFile(outputName).catch(() => {});
 
-        return data.buffer;
+        return data.slice().buffer;
     } catch (err) {
         await destroyFFmpegInstance();
         throw err;
@@ -895,6 +895,7 @@ function normalizeContainer(inputBytes, inputView) {
             newBytes: inputBytes,
             newView: inputView,
             changed: false,
+            valid: false,
         };
     }
 
@@ -1045,7 +1046,7 @@ function normalizeContainer(inputBytes, inputView) {
         );
     }
 
-    return { newBuffer, newBytes, newView, changed: true };
+    return { newBuffer, newBytes, newView, changed: true, valid: true };
 }
 
 async function patchSingleFile(item) {
@@ -1141,6 +1142,8 @@ async function patchSingleFile(item) {
 
     if (normalized.changed) {
         logMessage("  [Pass 1/1] Container normalized.", "success");
+    } else if (!normalized.valid) {
+        throw new Error("Invalid container: moov box not found");
     } else {
         logMessage("  [Pass 1/1] Container already normalized.", "info");
     }
