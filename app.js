@@ -460,16 +460,21 @@ function updatePatchButton() {
             const failedCount = selectedFiles.filter(
                 (f) => f.status === "error",
             ).length;
-            if (checkedCount === 0 && failedCount > 0) {
+            if (failedCount > 0) {
                 patchBtn.disabled = false;
-                const label =
+                const retryLabel =
                     failedCount > 1
                         ? `Retry Failed (${failedCount})`
                         : "Retry Failed";
-                patchBtn.querySelector("span").textContent = label;
+                patchBtn.querySelector("span").textContent = retryLabel;
             } else {
                 patchBtn.disabled = checkedCount === 0;
-                const label = `Download Selected (${checkedCount})`;
+                const label =
+                    checkedCount > 1
+                        ? `Download Selected (${checkedCount})`
+                        : checkedCount > 0
+                          ? "Download Selected"
+                          : "Patch Videos";
                 patchBtn.querySelector("span").textContent = label;
             }
         }
@@ -1258,13 +1263,6 @@ patchBtn.addEventListener("click", async () => {
             renderFileList();
             updatePatchButton();
         } else {
-            const checkedCount = selectedFiles.filter(
-                (f) => f.status === "success" && f.checked && f.patchedBuffer,
-            ).length;
-            if (checkedCount > 0) {
-                await downloadSelectedFiles();
-                return;
-            }
             const failedItems = selectedFiles.filter(
                 (f) => f.status === "error",
             );
@@ -1276,6 +1274,14 @@ patchBtn.addEventListener("click", async () => {
                 currentFlowState = "idle";
                 renderFileList();
                 updatePatchButton();
+            } else {
+                const checkedCount = selectedFiles.filter(
+                    (f) => f.status === "success" && f.checked && f.patchedBuffer,
+                ).length;
+                if (checkedCount > 0) {
+                    await downloadSelectedFiles();
+                    return;
+                }
             }
         }
     }
