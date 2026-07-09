@@ -1311,6 +1311,11 @@ async function acquireWakeLock() {
     if (!("wakeLock" in navigator)) return;
     try {
         wakeLock = await navigator.wakeLock.request("screen");
+        wakeLock.addEventListener("release", () => {
+            if (currentFlowState === "patching") {
+                acquireWakeLock();
+            }
+        });
     } catch (_) {
         wakeLock = null;
     }
