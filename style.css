@@ -289,6 +289,7 @@ body {
     padding: var(--space-md);
     display: flex;
     flex-direction: column;
+    position: relative;
     gap: var(--space-xs);
     scrollbar-width: thin;
     scrollbar-color: var(--color-primary) #000000;
@@ -300,14 +301,10 @@ body {
     flex: 1;
 }
 
-.panel-log {
-    position: relative;
-}
-
-.panel-log .log-copy-btn {
+.log-copy-btn {
     position: absolute;
-    bottom: var(--space-sm);
-    right: var(--space-sm);
+    bottom: var(--space-xs);
+    right: var(--space-xs);
     background: var(--bg-panel);
     border: var(--border-thick);
     padding: 2px 6px;
@@ -321,13 +318,13 @@ body {
     z-index: 2;
 }
 
-.panel-log .log-copy-btn:hover {
+.log-copy-btn:hover {
     box-shadow: none;
     transform: translate(2px, 2px);
     color: var(--color-accent);
 }
 
-.panel-log .log-copy-btn svg {
+.log-copy-btn svg {
     width: 12px;
     height: 12px;
     stroke: currentColor;
@@ -1366,16 +1363,7 @@ body {
         box-sizing: border-box;
     }
     .panel-log {
-        display: flex;
-        flex-direction: column;
-        background: var(--bg-panel);
-        border: var(--border-thick);
-        box-shadow: var(--shadow-flat);
-        border-radius: 4px;
-        padding: var(--space-md);
-        width: 100%;
-        box-sizing: border-box;
-        position: relative;
+        display: contents;
     }
     .status-log,
     .panel-log .status-log {
