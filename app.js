@@ -448,6 +448,17 @@ function removeFile(index) {
 }
 
 function updatePatchButton() {
+    const failedCount = selectedFiles.filter(
+        (f) => f.status === "error",
+    ).length;
+    if (failedCount > 0) {
+        patchBtn.disabled = false;
+        const retryLabel =
+            failedCount > 1 ? `Retry Failed (${failedCount})` : "Retry Failed";
+        patchBtn.querySelector("span").textContent = retryLabel;
+        return;
+    }
+
     if (currentFlowState === "completed") {
         const currentVfi = !!enableInterpolation?.checked;
         const currentRes =
@@ -462,26 +473,14 @@ function updatePatchButton() {
             const checkedCount = selectedFiles.filter(
                 (f) => f.status === "success" && f.checked && f.patchedBuffer,
             ).length;
-            const failedCount = selectedFiles.filter(
-                (f) => f.status === "error",
-            ).length;
-            if (failedCount > 0) {
-                patchBtn.disabled = false;
-                const retryLabel =
-                    failedCount > 1
-                        ? `Retry Failed (${failedCount})`
-                        : "Retry Failed";
-                patchBtn.querySelector("span").textContent = retryLabel;
-            } else {
-                patchBtn.disabled = checkedCount === 0;
-                const label =
-                    checkedCount > 1
-                        ? `Download Selected (${checkedCount})`
-                        : checkedCount > 0
-                          ? "Download Selected"
-                          : "Patch Videos";
-                patchBtn.querySelector("span").textContent = label;
-            }
+            patchBtn.disabled = checkedCount === 0;
+            const label =
+                checkedCount > 1
+                    ? `Download Selected (${checkedCount})`
+                    : checkedCount > 0
+                      ? "Download Selected"
+                      : "Patch Videos";
+            patchBtn.querySelector("span").textContent = label;
         }
     } else {
         const pendingCount = selectedFiles.filter(
