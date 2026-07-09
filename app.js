@@ -422,6 +422,7 @@ async function addFiles(fileList) {
         if (currentFlowState === "completed") {
             selectedFiles = [];
             currentFlowState = "idle";
+            setLogCopyVisible(false);
         }
         let skipped = 0;
         for (const file of filesArray) {
@@ -1241,6 +1242,7 @@ clearBtn.addEventListener("click", async (event) => {
     }
     selectedFiles = [];
     currentFlowState = "idle";
+    setLogCopyVisible(false);
     hideProgress();
     clearLog();
     renderFileList();
@@ -1307,6 +1309,7 @@ patchBtn.addEventListener("click", async () => {
                 }
             }
             currentFlowState = "idle";
+            setLogCopyVisible(false);
             renderFileList();
             updatePatchButton();
         } else {
@@ -1319,6 +1322,7 @@ patchBtn.addEventListener("click", async () => {
                     item.checked = true;
                 }
                 currentFlowState = "idle";
+                setLogCopyVisible(false);
                 renderFileList();
                 updatePatchButton();
             } else {
