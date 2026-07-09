@@ -1232,7 +1232,6 @@ async function patchSingleFile(item) {
         }
         if (isCancelled) throw new Error("Cancelled");
 
-        logMessage("Loading VFI engine...", "info");
         const workingBuffer = await runVFI(
             item.file,
             dims.width,
