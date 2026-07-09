@@ -1262,6 +1262,19 @@ document.addEventListener("visibilitychange", () => {
 });
 
 patchBtn.addEventListener("click", async () => {
+    const failedItems = selectedFiles.filter((f) => f.status === "error");
+    if (failedItems.length > 0) {
+        for (const item of failedItems) {
+            item.status = "pending";
+            item.checked = true;
+            item.patchedBuffer = null;
+        }
+        currentFlowState = "idle";
+        setLogCopyVisible(false);
+        renderFileList();
+        updatePatchButton();
+    }
+
     if (currentFlowState === "completed") {
         const currentVfi = !!enableInterpolation?.checked;
         const currentRes =
@@ -1282,27 +1295,13 @@ patchBtn.addEventListener("click", async () => {
             renderFileList();
             updatePatchButton();
         } else {
-            const failedItems = selectedFiles.filter(
-                (f) => f.status === "error",
-            );
-            if (failedItems.length > 0) {
-                for (const item of failedItems) {
-                    item.status = "pending";
-                    item.checked = true;
-                }
-                currentFlowState = "idle";
-                setLogCopyVisible(false);
-                renderFileList();
-                updatePatchButton();
-            } else {
-                const checkedCount = selectedFiles.filter(
-                    (f) =>
-                        f.status === "success" && f.checked && f.patchedBuffer,
-                ).length;
-                if (checkedCount > 0) {
-                    await downloadSelectedFiles();
-                    return;
-                }
+            const checkedCount = selectedFiles.filter(
+                (f) =>
+                    f.status === "success" && f.checked && f.patchedBuffer,
+            ).length;
+            if (checkedCount > 0) {
+                await downloadSelectedFiles();
+                return;
             }
         }
     }
