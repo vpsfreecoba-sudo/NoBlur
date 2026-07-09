@@ -667,7 +667,6 @@ async function getFFmpeg() {
     if (ffmpegInstance) return ffmpegInstance;
 
     const { FFmpeg } = await import("@ffmpeg/ffmpeg");
-    const { toBlobURL } = await import("@ffmpeg/util");
 
     ffmpegInstance = new FFmpeg();
     logMessage("Loading VFI engine...", "info");
@@ -675,28 +674,19 @@ async function getFFmpeg() {
         typeof window.SharedArrayBuffer !== "undefined" &&
         window.crossOriginIsolated;
     const baseURL = isMultiThread
-        ? "https://cdn.jsdelivr.net/npm/@ffmpeg/core-mt@0.12.6/dist/esm"
-        : "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm";
+        ? "/ffmpeg-core-mt"
+        : "/ffmpeg-core";
     ffmpegInstance.on("progress", ({ progress }) => {
         setProgress(Math.round(progress * 100));
     });
     try {
         const loadConfig = {
-            coreURL: await toBlobURL(
-                `${baseURL}/ffmpeg-core.js`,
-                "text/javascript",
-            ),
-            wasmURL: await toBlobURL(
-                `${baseURL}/ffmpeg-core.wasm`,
-                "application/wasm",
-            ),
+            coreURL: `${baseURL}/ffmpeg-core.js`,
+            wasmURL: `${baseURL}/ffmpeg-core.wasm`,
             classWorkerURL: "/ffmpeg-worker/worker.js",
         };
         if (isMultiThread) {
-            loadConfig.workerURL = await toBlobURL(
-                `${baseURL}/ffmpeg-core.worker.js`,
-                "text/javascript",
-            );
+            loadConfig.workerURL = `${baseURL}/ffmpeg-core.worker.js`;
         }
         await ffmpegInstance.load(loadConfig);
         logMessage("VFI engine loaded successfully.", "success");
