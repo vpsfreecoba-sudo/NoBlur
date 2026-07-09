@@ -934,13 +934,22 @@ function normalizeContainer(inputBytes, inputView) {
     const moovBox = topBoxes.find((b) => b.type === "moov");
     const mdatBox = topBoxes.find((b) => b.type === "mdat");
 
-    if (!moovBox || !mdatBox) {
+    if (!moovBox) {
         return {
             newBuffer: inputBytes.buffer,
             newBytes: inputBytes,
             newView: inputView,
             changed: false,
             valid: false,
+        };
+    }
+
+    if (!mdatBox) {
+        return {
+            newBuffer: inputBytes.buffer,
+            newBytes: inputBytes,
+            newView: inputView,
+            changed: false,
         };
     }
 
