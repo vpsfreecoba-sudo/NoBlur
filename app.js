@@ -731,12 +731,27 @@ async function runVFI(file, width, height, targetRes = 1080) {
             );
         }
 
+        const isMobile = isMobileDevice();
+        const vfiRes = isMobile ? Math.min(targetRes, 720) : targetRes;
         let filter =
             "mpdecimate,minterpolate=fps=60:mi_mode=mci:me_mode=bilat:me=epzs:search_param=4";
         if (width > height) {
-            filter = `scale=-2:${targetRes},${filter}`;
+            filter = `scale=-2:${vfiRes},${filter}`;
         } else {
-            filter = `scale=${targetRes}:-2,${filter}`;
+            filter = `scale=${vfiRes}:-2,${filter}`;
+        }
+        if (vfiRes !== targetRes) {
+            if (width > height) {
+                filter = `${filter},scale=-2:${targetRes}`;
+            } else {
+                filter = `${filter},scale=${targetRes}:-2`;
+            }
+        }
+        if (isMobile) {
+            logMessage(
+                `Mobile detected - scaling to ${vfiRes}p before interpolation to avoid OOM.`,
+                "info",
+            );
         }
 
         logMessage(
