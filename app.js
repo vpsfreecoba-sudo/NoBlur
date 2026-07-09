@@ -704,7 +704,7 @@ function resolveInputExtension(file) {
     return ".mp4";
 }
 
-async function runVFI(file, width, height, targetRes = 1080) {
+async function runVFI(file, width, height, targetRes = 1080, duration = 0) {
     const { fetchFile } = await import("@ffmpeg/util");
 
     let instance;
@@ -731,41 +731,30 @@ async function runVFI(file, width, height, targetRes = 1080) {
             );
         }
 
-        const isMobile = isMobileDevice();
-        const vfiRes = isMobile ? Math.min(targetRes, 720) : targetRes;
-        const meMode = isMobile ? "bidir" : "bilat";
-        let filter =
-            `mpdecimate,minterpolate=fps=60:mi_mode=mci:me_mode=${meMode}:me=epzs:search_param=4:scd=none`;
-        if (width > height) {
-            filter = `scale=-2:${vfiRes},${filter}`;
-        } else {
-            filter = `scale=${vfiRes}:-2,${filter}`;
-        }
-        if (vfiRes !== targetRes) {
+        const vfiRes = Math.min(targetRes, 480);
+        const meMode = isMobileDevice() ? "bidir" : "bilat";
+        const buildFilter = () => {
+            let f =
+                `mpdecimate,minterpolate=fps=60:mi_mode=mci:me_mode=${meMode}:me=epzs:search_param=4:scd=none`;
             if (width > height) {
-                filter = `${filter},scale=-2:${targetRes}`;
+                f = `scale=-2:${vfiRes},${f}`;
             } else {
-                filter = `${filter},scale=${targetRes}:-2`;
+                f = `scale=${vfiRes}:-2,${f}`;
             }
-        }
-        if (isMobile) {
-            logMessage(
-                `Mobile detected - scaling to ${vfiRes}p before interpolation to avoid OOM.`,
-                "info",
-            );
-        }
-
-        logMessage(
-            "Interpolating video frames to 60fps... This may take up to a minute.",
-            "info",
-        );
-        showProgress();
-        progressBar.classList.add("indeterminate");
-
-        const args = [
+            if (vfiRes !== targetRes) {
+                if (width > height) {
+                    f = `${f},scale=-2:${targetRes}`;
+                } else {
+                    f = `${f},scale=${targetRes}:-2`;
+                }
+            }
+            return f;
+        };
+        const buildArgs = (filter, out, extra = []) => [
             "-y",
             "-loglevel",
             "error",
+            ...extra,
             "-i",
             inputName,
             "-vf",
@@ -782,44 +771,133 @@ async function runVFI(file, width, height, targetRes = 1080) {
             "90000",
             "-threads",
             String(threads),
-            outputName,
+            out,
         ];
-
-        let ffmpegLog = "";
-        const logHandler = ({ message }) => {
-            ffmpegLog += message + "\n";
+        const runAndRead = async (args, out) => {
+            let ffmpegLog = "";
+            const logHandler = ({ message }) => {
+                ffmpegLog += message + "\n";
+            };
+            instance.on("log", logHandler);
+            const ret = await instance.exec(args);
+            instance.off?.("log", logHandler);
+            if (ret !== 0) {
+                const tail = ffmpegLog.trim().split("\n").slice(-12).join("\n");
+                logMessage("VFI ffmpeg failed (exit " + ret + "):", "error");
+                if (tail) logMessage(tail, "error");
+                await instance.deleteFile(inputName).catch(() => {});
+                await instance.deleteFile(out).catch(() => {});
+                progressBar.classList.remove("indeterminate");
+                throw new Error("VFI ffmpeg failed with exit code " + ret);
+            }
+            const data = await instance.readFile(out);
+            if (!data || data.length < 100) {
+                logMessage("VFI produced empty or invalid output.", "error");
+                await instance.deleteFile(inputName).catch(() => {});
+                await instance.deleteFile(out).catch(() => {});
+                progressBar.classList.remove("indeterminate");
+                throw new Error("VFI produced no output");
+            }
+            await instance.deleteFile(out).catch(() => {});
+            return data;
         };
-        instance.on("log", logHandler);
 
-        const ret = await instance.exec(args);
-        instance.off?.("log", logHandler);
-        if (ret !== 0) {
-            const tail = ffmpegLog.trim().split("\n").slice(-12).join("\n");
-            logMessage("VFI ffmpeg failed (exit " + ret + "):", "error");
-            if (tail) logMessage(tail, "error");
-            await instance.deleteFile(inputName).catch(() => {});
+        const SEGMENT_SECONDS = 30;
+        const useSegment =
+            duration > SEGMENT_SECONDS && typeof duration === "number";
+
+        logMessage(
+            "Interpolating video frames to 60fps... This may take up to a minute.",
+            "info",
+        );
+        showProgress();
+        progressBar.classList.add("indeterminate");
+
+        let outputData;
+        if (useSegment) {
+            const segmentCount = Math.ceil(duration / SEGMENT_SECONDS);
+            logMessage(
+                `Large video (${duration.toFixed(0)}s) - processing in ${segmentCount} segments to avoid OOM.`,
+                "info",
+            );
+            const chunkNames = [];
+            for (let i = 0; i < segmentCount; i++) {
+                const start = i * SEGMENT_SECONDS;
+                const len = Math.min(SEGMENT_SECONDS, duration - start);
+                const chunkName = `chunk_${i}.mp4`;
+                logMessage(
+                    `  Segment ${i + 1}/${segmentCount} (${start.toFixed(0)}-${(start + len).toFixed(0)}s)...`,
+                    "info",
+                );
+                const args = buildArgs(buildFilter(), chunkName, [
+                    "-ss",
+                    start.toFixed(3),
+                    "-t",
+                    len.toFixed(3),
+                ]);
+                await runAndRead(args, chunkName);
+                chunkNames.push(chunkName);
+            }
+            const listName = "concat_list.txt";
+            await instance.writeFile(
+                listName,
+                chunkNames.map((n) => `file '${n}'`).join("\n") + "\n",
+            );
+            const concatArgs = [
+                "-y",
+                "-loglevel",
+                "error",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                listName,
+                "-c",
+                "copy",
+                outputName,
+            ];
+            let ffmpegLog = "";
+            const logHandler = ({ message }) => {
+                ffmpegLog += message + "\n";
+            };
+            instance.on("log", logHandler);
+            const ret = await instance.exec(concatArgs);
+            instance.off?.("log", logHandler);
+            if (ret !== 0) {
+                const tail = ffmpegLog.trim().split("\n").slice(-12).join("\n");
+                logMessage("VFI concat failed (exit " + ret + "):", "error");
+                if (tail) logMessage(tail, "error");
+                progressBar.classList.remove("indeterminate");
+                throw new Error("VFI concat failed with exit code " + ret);
+            }
+            for (const n of chunkNames) {
+                await instance.deleteFile(n).catch(() => {});
+            }
+            await instance.deleteFile(listName).catch(() => {});
+            outputData = await instance.readFile(outputName);
             await instance.deleteFile(outputName).catch(() => {});
-            progressBar.classList.remove("indeterminate");
-            throw new Error("VFI ffmpeg failed with exit code " + ret);
+        } else {
+            if (vfiRes !== targetRes) {
+                logMessage(
+                    `Scaling to ${vfiRes}p before interpolation to avoid OOM, output ${targetRes}p.`,
+                    "info",
+                );
+            }
+            outputData = await runAndRead(
+                buildArgs(buildFilter(), outputName),
+                outputName,
+            );
         }
 
         logMessage("Completed frame processing.", "success");
-        const data = await instance.readFile(outputName);
-        if (!data || data.length < 100) {
-            logMessage("VFI produced empty or invalid output.", "error");
-            await instance.deleteFile(inputName).catch(() => {});
-            await instance.deleteFile(outputName).catch(() => {});
-            progressBar.classList.remove("indeterminate");
-            throw new Error("VFI produced no output");
-        }
-        const head = String.fromCharCode(...data.slice(4, 12));
-        logMessage(`  VFI output: ${data.length} bytes, head="${head}"`, "info");
+        const head = String.fromCharCode(...outputData.slice(4, 12));
+        logMessage(`  VFI output: ${outputData.length} bytes, head="${head}"`, "info");
 
         await instance.deleteFile(inputName).catch(() => {});
-        await instance.deleteFile(outputName).catch(() => {});
         progressBar.classList.remove("indeterminate");
 
-        return data.slice().buffer;
+        return outputData.slice().buffer;
     } catch (err) {
         await destroyFFmpegInstance();
         throw err;
@@ -950,6 +1028,7 @@ function normalizeContainer(inputBytes, inputView) {
             newBytes: inputBytes,
             newView: inputView,
             changed: false,
+            valid: true,
         };
     }
 
@@ -1049,6 +1128,7 @@ function normalizeContainer(inputBytes, inputView) {
             newBytes: inputBytes,
             newView: inputView,
             changed: false,
+            valid: true,
         };
     }
 
@@ -1111,6 +1191,7 @@ async function patchSingleFile(item) {
 
     let sourceBuffer = null;
     let movThumbnail = null;
+    let videoInfo = null;
 
     if (isMovFile(item.file) && !enableInterpolation?.checked) {
         logMessage("Processing MOV file directly...", "info");
@@ -1157,6 +1238,7 @@ async function patchSingleFile(item) {
             dims.width,
             dims.height,
             targetRes,
+            videoInfo?.duration || 0,
         );
         sourceBuffer = workingBuffer;
         logMessage(
@@ -1178,13 +1260,14 @@ async function patchSingleFile(item) {
     }
     if (isCancelled) throw new Error("Cancelled");
 
-    let videoInfo = null;
     if (!sourceBuffer) {
         videoInfo = await getVideoDurationAndResolution(item.file);
         if (isCancelled) throw new Error("Cancelled");
         if (!videoInfo && !isMovFile(item.file)) {
             throw new Error("Could not parse video metadata.");
         }
+    } else if (!videoInfo) {
+        videoInfo = await getVideoDurationAndResolution(item.file);
     }
 
     const mimeType = getMimeType(item.file);
@@ -1226,10 +1309,6 @@ async function patchSingleFile(item) {
     if (normalized.changed) {
         logMessage("  [Pass 1/1] Container normalized.", "success");
     } else if (!normalized.valid) {
-        const topTypes = parseBoxes(inputBytes, inputView, 0, inputBytes.length)
-            .map((b) => b.type)
-            .join(",");
-        logMessage(`  Debug: top boxes = [${topTypes}]`, "error");
         throw new Error("Invalid container: moov box not found");
     } else {
         logMessage("  [Pass 1/1] Container already normalized.", "info");
