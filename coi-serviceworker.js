@@ -30,13 +30,6 @@ if (typeof window === "undefined") {
         if (!r.url.startsWith(self.location.origin)) {
             return;
         }
-        if (
-            r.destination === "worker" ||
-            r.destination === "sharedworker" ||
-            r.url.includes("worker")
-        ) {
-            return;
-        }
         if (r.cache === "only-if-cached" && r.mode !== "same-origin") {
             return;
         }
