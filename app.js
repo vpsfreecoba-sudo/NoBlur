@@ -670,7 +670,7 @@ async function getFFmpeg() {
         const loadConfig = {
             coreURL: `${baseURL}/ffmpeg-core.js`,
             wasmURL: `${baseURL}/ffmpeg-core.wasm`,
-            classWorkerURL: "/ffmpeg-worker/worker.js",
+            classWorkerURL: new URL("/ffmpeg-worker/worker.js", location.origin).href,
         };
         if (isMultiThread) {
             loadConfig.workerURL = `${baseURL}/ffmpeg-core.worker.js`;
