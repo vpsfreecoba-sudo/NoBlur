@@ -723,7 +723,7 @@ async function runVFI(file, width, height, targetRes = 1080, duration = 0) {
         const isMultiThread =
             typeof window.SharedArrayBuffer !== "undefined" &&
             window.crossOriginIsolated;
-        const threads = Math.min(navigator.hardwareConcurrency || 4, 8);
+        const threads = Math.max(1, Math.floor((navigator.hardwareConcurrency || 4) / 2));
         if (!isMultiThread) {
             logMessage(
                 "Notice: Single-threaded mode active. Enable HTTPS/cross-origin isolation for faster processing.",
@@ -731,7 +731,7 @@ async function runVFI(file, width, height, targetRes = 1080, duration = 0) {
             );
         }
 
-        const vfiRes = Math.min(targetRes, 480);
+        const vfiRes = Math.min(targetRes, 1080);
         const meMode = isMobileDevice() ? "bidir" : "bilat";
         const buildFilter = () => {
             let f =
@@ -743,9 +743,9 @@ async function runVFI(file, width, height, targetRes = 1080, duration = 0) {
             }
             if (vfiRes !== targetRes) {
                 if (width > height) {
-                    f = `${f},scale=-2:${targetRes}`;
+                    f = `${f},scale=-2:${targetRes}:flags=lanczos`;
                 } else {
-                    f = `${f},scale=${targetRes}:-2`;
+                    f = `${f},scale=${targetRes}:-2:flags=lanczos`;
                 }
             }
             return f;
@@ -754,7 +754,6 @@ async function runVFI(file, width, height, targetRes = 1080, duration = 0) {
             "-y",
             "-loglevel",
             "error",
-            ...extra,
             "-i",
             inputName,
             "-vf",
@@ -765,15 +764,14 @@ async function runVFI(file, width, height, targetRes = 1080, duration = 0) {
             "ultrafast",
             "-crf",
             "20",
-            "-c:a",
-            "copy",
+            ...extra,
             "-video_track_timescale",
             "90000",
             "-threads",
             String(threads),
             out,
         ];
-        const runAndRead = async (args, out) => {
+        const runAndRead = async (args, out, keepFile = false) => {
             let ffmpegLog = "";
             const logHandler = ({ message }) => {
                 ffmpegLog += message + "\n";
@@ -798,13 +796,14 @@ async function runVFI(file, width, height, targetRes = 1080, duration = 0) {
                 progressBar.classList.remove("indeterminate");
                 throw new Error("VFI produced no output");
             }
-            await instance.deleteFile(out).catch(() => {});
+            if (!keepFile) {
+                await instance.deleteFile(out).catch(() => {});
+            }
             return data;
         };
 
-        const SEGMENT_SECONDS = 30;
-        const useSegment =
-            duration > SEGMENT_SECONDS && typeof duration === "number";
+        const SEGMENT_SECONDS = 5;
+        const useSegment = typeof duration === "number" && duration > 0;
 
         logMessage(
             "Interpolating video frames to 60fps... This may take up to a minute.",
@@ -816,10 +815,17 @@ async function runVFI(file, width, height, targetRes = 1080, duration = 0) {
         let outputData;
         if (useSegment) {
             const segmentCount = Math.ceil(duration / SEGMENT_SECONDS);
-            logMessage(
-                `Large video (${duration.toFixed(0)}s) - processing in ${segmentCount} segments to avoid OOM.`,
-                "info",
-            );
+            if (duration > 30) {
+                logMessage(
+                    `Large video (${duration.toFixed(0)}s) - processing in ${segmentCount} segments to avoid OOM.`,
+                    "info",
+                );
+            } else {
+                logMessage(
+                    `Processing in ${segmentCount} segments (${SEGMENT_SECONDS}s each) to keep memory stable.`,
+                    "info",
+                );
+            }
             const chunkNames = [];
             for (let i = 0; i < segmentCount; i++) {
                 const start = i * SEGMENT_SECONDS;
@@ -834,27 +840,36 @@ async function runVFI(file, width, height, targetRes = 1080, duration = 0) {
                     start.toFixed(3),
                     "-t",
                     len.toFixed(3),
+                    "-an",
                 ]);
-                await runAndRead(args, chunkName);
+                await runAndRead(args, chunkName, true);
                 chunkNames.push(chunkName);
             }
-            const listName = "concat_list.txt";
-            await instance.writeFile(
-                listName,
-                chunkNames.map((n) => `file '${n}'`).join("\n") + "\n",
-            );
+            const inputFlags = chunkNames.map((n) => ["-i", n]).flat();
             const concatArgs = [
                 "-y",
                 "-loglevel",
                 "error",
-                "-f",
-                "concat",
-                "-safe",
-                "0",
+                ...inputFlags,
                 "-i",
-                listName,
-                "-c",
+                inputName,
+                "-filter_complex",
+                `concat=n=${chunkNames.length}:v=1:a=0[outv]`,
+                "-map",
+                "[outv]",
+                "-map",
+                `${chunkNames.length}:a?`,
+                "-c:v",
+                "libx264",
+                "-preset",
+                "ultrafast",
+                "-crf",
+                "20",
+                "-c:a",
                 "copy",
+                "-shortest",
+                "-video_track_timescale",
+                "90000",
                 outputName,
             ];
             let ffmpegLog = "";
@@ -874,18 +889,11 @@ async function runVFI(file, width, height, targetRes = 1080, duration = 0) {
             for (const n of chunkNames) {
                 await instance.deleteFile(n).catch(() => {});
             }
-            await instance.deleteFile(listName).catch(() => {});
             outputData = await instance.readFile(outputName);
             await instance.deleteFile(outputName).catch(() => {});
         } else {
-            if (vfiRes !== targetRes) {
-                logMessage(
-                    `Scaling to ${vfiRes}p before interpolation to avoid OOM, output ${targetRes}p.`,
-                    "info",
-                );
-            }
             outputData = await runAndRead(
-                buildArgs(buildFilter(), outputName),
+                buildArgs(buildFilter(), outputName, ["-c:a", "copy"]),
                 outputName,
             );
         }
@@ -1230,6 +1238,9 @@ async function patchSingleFile(item) {
                 "info",
             );
         }
+        if (isCancelled) throw new Error("Cancelled");
+
+        videoInfo = await getVideoDurationAndResolution(item.file);
         if (isCancelled) throw new Error("Cancelled");
 
         const workingBuffer = await runVFI(

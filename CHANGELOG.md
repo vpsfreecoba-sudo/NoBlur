@@ -2,6 +2,15 @@
 
 All notable changes to the NoBlur project are documented in this file.
 
+## [2.5.0] - 2026-07-12
+
+- VFI interpolation cap raised from 480p to 1080p on all devices
+- VFI processing split into 5s segments (every video) to keep memory stable
+- Segment concat rewritten via filter_complex; audio copied from source
+- Thread count set to half of hardware concurrency
+- Output upscaling uses lanczos resampling
+- "Large video" log now only shown for videos longer than 30s
+
 ## [2.4.0] - 2026-06-18
 
 **Pipeline Simplification — Single-Pass Frame Density Inflation**
