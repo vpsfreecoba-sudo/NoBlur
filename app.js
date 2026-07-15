@@ -29,7 +29,7 @@ const MOBILE_SCROLL_DELAY_MS = 150;
 const DOWNLOAD_ANCHOR_CLEANUP_MS = 100;
 const SAFE_THUMBNAIL_PREFIX = "data:image/jpeg;base64,";
 
-const outputSuffix = " METHOD MINZHA @xd_minn";
+const outputSuffix = "METHOD MINZHA @xd_minn";
 const supportedMimeTypes = [
     "video/mp4",
     "video/quicktime",
@@ -175,10 +175,7 @@ function isMovFile(file) {
 }
 
 function getOutputFilename(file) {
-    const lastDotIndex = file.name.lastIndexOf(".");
-    const name =
-        lastDotIndex > 0 ? file.name.substring(0, lastDotIndex) : file.name;
-    return `${name}${outputSuffix}.mp4`;
+    return `${outputSuffix}.mp4`;
 }
 
 function captureVideoFrame(file) {
