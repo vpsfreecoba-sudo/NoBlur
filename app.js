@@ -29,7 +29,7 @@ const MOBILE_SCROLL_DELAY_MS = 150;
 const DOWNLOAD_ANCHOR_CLEANUP_MS = 100;
 const SAFE_THUMBNAIL_PREFIX = "data:image/jpeg;base64,";
 
-const outputSuffix = "_MINZHA METHOD @XD_MINN";
+const outputSuffix = " METHOD MINZHA @xd_minn";
 const supportedMimeTypes = [
     "video/mp4",
     "video/quicktime",
