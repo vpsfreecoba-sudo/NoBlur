@@ -1529,7 +1529,7 @@ if (changelogContainer) {
 }
 
 // ===== POPUP FOLLOW @xd_minn =====
-document.addEventListener('DOMContentLoaded', function() {
+(function() {
   const popup = document.getElementById('popupFollow');
   const closeBtn = document.getElementById('popupClose');
   const laterBtn = document.getElementById('popupLater');
@@ -1548,10 +1548,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   if (closeBtn) closeBtn.addEventListener('click', closePopup);
   if (laterBtn) laterBtn.addEventListener('click', closePopup);
-
   popup.addEventListener('click', function(e) {
     if (e.target === popup) closePopup();
   });
-});
-
- 
+})();
