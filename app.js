@@ -1527,7 +1527,31 @@ const changelogContainer = document.getElementById("changelogContainer");
 if (changelogContainer) {
     initChangelog(changelogContainer);
 }
+
 // ===== POPUP FOLLOW @xd_minn =====
-document.addEventListener('
+document.addEventListener('DOMContentLoaded', function() {
+  const popup = document.getElementById('popupFollow');
+  const closeBtn = document.getElementById('popupClose');
+  const laterBtn = document.getElementById('popupLater');
+  if (!popup) return;
+
+  if (!localStorage.getItem('popupFollowClosed')) {
+    setTimeout(function() {
+      popup.classList.add('active');
+    }, 800);
+  }
+
+  function closePopup() {
+    popup.classList.remove('active');
+    localStorage.setItem('popupFollowClosed', 'true');
+  }
+
+  if (closeBtn) closeBtn.addEventListener('click', closePopup);
+  if (laterBtn) laterBtn.addEventListener('click', closePopup);
+
+  popup.addEventListener('click', function(e) {
+    if (e.target === popup) closePopup();
+  });
+});
 
  
