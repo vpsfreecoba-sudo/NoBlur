@@ -1527,3 +1527,7 @@ const changelogContainer = document.getElementById("changelogContainer");
 if (changelogContainer) {
     initChangelog(changelogContainer);
 }
+// ===== POPUP FOLLOW @xd_minn =====
+document.addEventListener('
+
+ 
