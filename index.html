@@ -24,55 +24,34 @@
   }
   </script>
   <style>
-    /* ===== PERBAIKAN TULISAN BOCOR & TEBAL ===== */
-    .tutorial-header {
-      font-weight: 700 !important;
-    }
-    .tutorial-list li {
-      font-weight: 600 !important;
-      word-break: break-word;
-      overflow-wrap: break-word;
-    }
-    .queue-title {
-      font-weight: 700 !important;
-      word-break: break-word;
-      overflow-wrap: break-word;
-    }
-    .btn-patch {
-      font-weight: 700 !important;
-      word-break: break-word;
-      overflow-wrap: break-word;
-    }
-    .upload-note {
-      word-break: break-word;
-      overflow-wrap: break-word;
-    }
-    .interpolator-note {
-      word-break: break-word;
-      overflow-wrap: break-word;
-    }
-    .drop-text-primary,
-    .drop-text-secondary {
-      word-break: break-word;
-      overflow-wrap: break-word;
-    }
-    .header-title,
-    .header-subtitle {
-      word-break: break-word;
-      overflow-wrap: break-word;
-    }
-    .log-title {
-      word-break: break-word;
-      overflow-wrap: break-word;
-    }
-    /* Pastikan tombol "Proses Video" gak kepotong */
-    .btn-patch span {
-      white-space: normal;
-      word-break: break-word;
-    }
+    .tutorial-header { font-weight: 700 !important; }
+    .tutorial-list li { font-weight: 600 !important; word-break: break-word; overflow-wrap: break-word; }
+    .queue-title { font-weight: 700 !important; word-break: break-word; overflow-wrap: break-word; }
+    .btn-patch { font-weight: 700 !important; word-break: break-word; overflow-wrap: break-word; }
+    .upload-note { word-break: break-word; overflow-wrap: break-word; }
+    .interpolator-note { word-break: break-word; overflow-wrap: break-word; }
+    .drop-text-primary, .drop-text-secondary { word-break: break-word; overflow-wrap: break-word; }
+    .header-title, .header-subtitle { word-break: break-word; overflow-wrap: break-word; }
+    .log-title { word-break: break-word; overflow-wrap: break-word; }
+    .btn-patch span { white-space: normal; word-break: break-word; }
   </style>
 </head>
 <body>
+
+<!-- POPUP FOLLOW @xd_minn -->
+<div class="popup-overlay" id="popupFollow">
+  <div class="popup-card">
+    <button class="popup-close" id="popupClose"><i class="ri-close-fill"></i></button>
+    <div class="popup-icon"><i class="ri-heart-3-fill"></i></div>
+    <div class="popup-title">Dukung Kami! 🫶</div>
+    <div class="popup-desc">Follow & join biar gak ketinggalan update terbaru!</div>
+    <div class="popup-buttons">
+      <a class="popup-btn popup-btn-tiktok" href="https://www.tiktok.com/@xd_minn" target="_blank" rel="noopener noreferrer"><i class="ri-tiktok-fill"></i> Follow @xd_minn</a>
+      <a class="popup-btn popup-btn-wa" href="https://whatsapp.com/channel/0029VbBfeEYLdQeeaWTfqY3E" target="_blank" rel="noopener noreferrer"><i class="ri-whatsapp-fill"></i> Join Saluran WA</a>
+    </div>
+    <button class="popup-btn popup-btn-later" id="popupLater">Nanti aja</button>
+  </div>
+</div>
 
   <div class="page">
 
@@ -91,7 +70,6 @@
             <div class="interpolator-header">
               <span class="interpolator-title">PENGATURAN VIDEO</span>
             </div>
-            <!-- HAPUS checkbox Enable 60fps & dropdown resolusi -->
             <div class="interpolator-info">
               <div class="interpolator-note">
                 <i class="ri-cpu-fill"></i>
@@ -153,7 +131,6 @@
           </div>
         </div>
 
-        <!-- History container (tetap ada) -->
         <div class="history-container">
           <div class="history-header" id="historyHeader">
             <div class="history-header-left">
@@ -193,9 +170,6 @@
     Dibuat oleh <span>Minzha</span> &middot; <a href="https://www.tiktok.com/@xd_minn" target="_blank" rel="noopener noreferrer">TikTok: @xd_minn</a>
     <span id="changelogContainer"></span>
   </div>
-
-  <!-- HAPUS modal VFI -->
-  <!-- <div class="modal-overlay" id="vfiModal"> ... </div> -->
 
   <div class="modal-overlay" id="tiktokModal">
     <div class="modal-card">
