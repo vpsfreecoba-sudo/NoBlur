@@ -46,11 +46,12 @@ export default async function handler(req, res) {
             throw new Error("Foto profil tidak ditemukan di halaman TikTok");
         }
 
-        // Cache di edge Vercel selama 30 menit supaya tidak membanjiri TikTok
-        // dengan request tiap ada pengunjung, tapi tetap "real-time-ish".
+        // Cache di edge Vercel selama 1 menit sesuai permintaan — lebih cepat update,
+        // tapi request ke TikTok jadi lebih sering. Kalau nanti sering gagal/foto
+        // gak muncul, kemungkinan kena rate-limit TikTok, tinggal naikkan angka ini lagi.
         res.setHeader(
             "Cache-Control",
-            "s-maxage=1800, stale-while-revalidate=3600"
+            "s-maxage=60, stale-while-revalidate=120"
         );
         res.status(200).json({ avatar: avatarUrl, username });
     } catch (err) {
